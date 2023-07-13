@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"log"
@@ -12,21 +11,44 @@ import (
 )
 
 type Entry struct {
-	keyLength   int16
-	key         []byte
-	valueLength int16
-	value       []byte
+	KeyLength   int16
+	Key         []byte
+	ValueLength int16
+	Value       []byte
 }
 
-func EncodeToBytes(p string) []byte {
-	buf := &bytes.Buffer{}
-	err := binary.Write(buf, binary.LittleEndian, p)
-	if err != nil {
-		log.Fatal(err)
-	}
+func EncodeToBytes(entry *Entry) []byte {
+	var buffer []byte
 
-	fmt.Println("uncompressed size (bytes): ", len(buf.Bytes()))
-	return buf.Bytes()
+	lengthByte := make([]byte, 2)
+	binary.LittleEndian.PutUint16(lengthByte, uint16(entry.KeyLength))
+
+	buffer = append(buffer, lengthByte...)
+	buffer = append(buffer, entry.Key...)
+
+	binary.LittleEndian.PutUint16(lengthByte, uint16(entry.ValueLength))
+	buffer = append(buffer, lengthByte...)
+	buffer = append(buffer, entry.Value...)
+
+	return buffer
+}
+
+func DecodeFromBytes(data []byte) *Entry {
+	entry := &Entry{}
+	var offset int16 = 0
+
+	entry.KeyLength = int16(binary.LittleEndian.Uint16(data[offset:2]))
+	offset += 2
+
+	entry.Key = data[offset : offset+entry.KeyLength]
+	offset += entry.KeyLength
+
+	entry.ValueLength = int16(binary.LittleEndian.Uint16(data[offset : offset+2]))
+	offset += 2
+
+	entry.Value = data[offset:]
+
+	return entry
 }
 
 func main() {
@@ -52,14 +74,23 @@ func main() {
 	}
 	defer file.Close()
 
-	temp := string("test")
-	// test := []byte(temp)
-	test := EncodeToBytes(temp)
+	entry := Entry{
+		KeyLength:   5,
+		Key:         []byte("xxxxx"),
+		ValueLength: 6,
+		Value:       []byte("aaaaaa"),
+	}
+
+	test := EncodeToBytes(&entry)
 	n, err := file.Write(test)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
+	fmt.Println(test)
+
+	DecodeFromBytes(test)
 
 	log.Println(test)
 	log.Printf("save %d byte.", n)

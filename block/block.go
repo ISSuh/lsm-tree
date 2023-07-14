@@ -10,8 +10,9 @@ const (
 )
 
 type Block struct {
-	data    []byte
-	offsets []int16
+	data     []byte
+	offsets  []int16
+	entryNum int16
 }
 
 func (block *Block) Data() []byte {
@@ -22,20 +23,56 @@ func (block *Block) Offset() []int16 {
 	return block.offsets
 }
 
+func (block *Block) EntryNum() int16 {
+	return block.entryNum
+}
+
+func (block *Block) Encode() []byte {
+	buffer := block.data
+	for _, offset := range block.offsets {
+		offsetByte := make([]byte, LengthTypeSize)
+		binary.LittleEndian.PutUint16(offsetByte, uint16(offset))
+		buffer = append(buffer, offsetByte...)
+	}
+
+	entryNumByte := make([]byte, LengthTypeSize)
+	binary.LittleEndian.PutUint16(entryNumByte, uint16(block.entryNum))
+	buffer = append(buffer, entryNumByte...)
+
+	return buffer
+}
+
+func (block *Block) Decode(data []byte) {
+	entryNumValueOffset := len(data) - LengthTypeSize
+	block.entryNum = int16(binary.LittleEndian.Uint16(data[entryNumValueOffset:]))
+
+	offset := 0
+	calculrateOffset := entryNumValueOffset - (int(block.entryNum) * LengthTypeSize)
+
+	block.data = data[offset:calculrateOffset]
+	offset += calculrateOffset
+
+	for offset < entryNumValueOffset {
+		value := int16(binary.LittleEndian.Uint16(data[offset:LengthTypeSize]))
+		block.offsets = append(block.offsets, value)
+		offset += LengthTypeSize
+	}
+}
+
 type BlockMeta struct {
-	offset  int16
-	fistKey []byte
+	metaOffset int16
+	fistKey    []byte
 }
 
 func NewBlockMeta(offset int16, fistKey []byte) BlockMeta {
 	return BlockMeta{
-		offset:  offset,
-		fistKey: fistKey,
+		metaOffset: offset,
+		fistKey:    fistKey,
 	}
 }
 
 func (meta *BlockMeta) Offset() int16 {
-	return meta.offset
+	return meta.metaOffset
 }
 
 func (meta *BlockMeta) FirstKey() []byte {
@@ -45,22 +82,34 @@ func (meta *BlockMeta) FirstKey() []byte {
 func (meta *BlockMeta) Encode() []byte {
 	var buffer []byte
 	offsetByte := make([]byte, LengthTypeSize)
+	binary.LittleEndian.PutUint16(offsetByte, uint16(meta.metaOffset))
 
-	binary.LittleEndian.PutUint16(offsetByte, uint16(meta.offset))
+	fistKeyLengthByte := make([]byte, LengthTypeSize)
+	binary.LittleEndian.PutUint16(fistKeyLengthByte, uint16(len(meta.fistKey)))
+
 	buffer = append(buffer, offsetByte...)
+	buffer = append(buffer, fistKeyLengthByte...)
 	buffer = append(buffer, meta.fistKey...)
 	return buffer
 }
 
 func (meta *BlockMeta) Decode(data []byte) {
-	meta.offset = int16(binary.LittleEndian.Uint16(data[0:LengthTypeSize]))
-	meta.fistKey = data[LengthTypeSize:]
+	offset := 0
+
+	meta.metaOffset = int16(binary.LittleEndian.Uint16(data[offset:LengthTypeSize]))
+	offset += LengthTypeSize
+
+	// meta.metaOffset = int16(binary.LittleEndian.Uint16(data[offset:LengthTypeSize]))
+	// offset += LengthTypeSize
+
+	meta.fistKey = data[offset:]
 }
 
 type BlockBuilder struct {
 	data         []byte
 	offsets      []int16
 	maxBlockSize int
+	entryNum     int16
 }
 
 func NewBlockBuilder(maxBlockSize int) *BlockBuilder {
@@ -68,6 +117,7 @@ func NewBlockBuilder(maxBlockSize int) *BlockBuilder {
 		data:         make([]byte, 0),
 		offsets:      make([]int16, 0),
 		maxBlockSize: maxBlockSize,
+		entryNum:     0,
 	}
 }
 
@@ -75,17 +125,11 @@ func (builder *BlockBuilder) Empty() bool {
 	return len(builder.offsets) == 0
 }
 
-func (builder *BlockBuilder) Clear() {
-	builder.data = make([]byte, 0)
-	builder.offsets = make([]int16, 0)
-}
-
+// blcok size is (entries byte buffer) * (sizeof(int16) * number of offset) * (sizeof(int16))
 func (builder *BlockBuilder) Size() int {
-	offsetByteSize := len(builder.offsets) * LengthTypeSize
 	dataByteSize := len(builder.data)
-	// entryCountByteSize := LengthTypeSize
-
-	return offsetByteSize + dataByteSize
+	offsetByteSize := len(builder.offsets) * LengthTypeSize
+	return dataByteSize + offsetByteSize + LengthTypeSize
 }
 
 func (builder *BlockBuilder) MaxBlockSize() int {
@@ -113,18 +157,15 @@ func (builder *BlockBuilder) Add(key, value []byte) bool {
 
 	builder.offsets = append(builder.offsets, int16(len(builder.data)))
 	builder.data = append(builder.data, buffer...)
+
+	builder.entryNum++
 	return true
 }
 
 func (builder *BlockBuilder) BuildBlock() *Block {
-	copidData := make([]byte, len(builder.data))
-	copy(copidData, builder.data)
-
-	copidOffsets := make([]int16, len(builder.offsets))
-	copy(copidOffsets, builder.offsets)
-
 	return &Block{
-		data:    copidData,
-		offsets: copidOffsets,
+		data:     builder.data,
+		offsets:  builder.offsets,
+		entryNum: builder.entryNum,
 	}
 }

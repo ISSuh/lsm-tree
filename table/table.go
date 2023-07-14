@@ -4,9 +4,12 @@ import (
 	"encoding/binary"
 	"log"
 	"os"
-	"reflect"
 
 	block "github.com/ISSuh/lsm-tree/block"
+)
+
+const (
+	BlockMetaOffetTypeSize = 4
 )
 
 type Table struct {
@@ -15,6 +18,58 @@ type Table struct {
 	file             *os.File
 	blockMetas       []block.BlockMeta
 	blockMetasOffset int
+}
+
+func OpenTable(id int, path string) *Table {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Println("file open fail")
+		return nil
+	}
+	defer file.Close()
+
+	table := &Table{
+		id:               id,
+		path:             path,
+		file:             file,
+		blockMetas:       make([]block.BlockMeta, 0),
+		blockMetasOffset: 0,
+	}
+
+	info, err := table.file.Stat()
+	if err != nil {
+		log.Println("get file stat fail")
+	}
+
+	table.decodeBlockMetaOffset(info.Size())
+	table.decodeBlockMetas(info.Size())
+	return table
+}
+
+func (table *Table) decodeBlockMetaOffset(fileSize int64) {
+	blockMetaOffsetByte := make([]byte, BlockMetaOffetTypeSize)
+	n, err := table.file.ReadAt(blockMetaOffsetByte, fileSize-BlockMetaOffetTypeSize)
+	if (err != nil) || (n != BlockMetaOffetTypeSize) {
+		log.Println("read error")
+	}
+
+	table.blockMetasOffset = int(binary.LittleEndian.Uint32(blockMetaOffsetByte))
+}
+
+func (table *Table) decodeBlockMetas(fileSize int64) {
+	calculateblockMetasSize := fileSize - int64(table.blockMetasOffset-BlockMetaOffetTypeSize)
+
+	blockMetasByte := make([]byte, calculateblockMetasSize)
+	n, err := table.file.ReadAt(blockMetasByte, int64(table.blockMetasOffset))
+	if (err != nil) || (n != int(calculateblockMetasSize)) {
+		log.Println("read error")
+	}
+
+	// TODO : need decode BlockMetas from byte
+	// offset := 0
+	// for offset < calculateblockMetasSize {
+
+	// }
 }
 
 type TableBuilder struct {
@@ -47,7 +102,6 @@ func (builder *TableBuilder) Add(key, value []byte) {
 	}
 
 	if builder.blockBuilder.Add(key, value) {
-		log.Println("add")
 		return
 	}
 
@@ -58,32 +112,25 @@ func (builder *TableBuilder) Add(key, value []byte) {
 }
 
 func (builder *TableBuilder) flushingBlock() {
-	log.Println("flushing")
-
 	newBlock := builder.blockBuilder.BuildBlock()
-	log.Println("flushing - block: ", newBlock)
 
 	offset := int16(len(builder.data))
 	firstKey := builder.fistKeys[len(builder.fistKeys)-1]
 	newBlockMeta := block.NewBlockMeta(offset, firstKey)
 
 	builder.blockMetas = append(builder.blockMetas, newBlockMeta)
-	builder.data = append(builder.data, newBlock.Data()...)
+	builder.data = append(builder.data, newBlock.Encode()...)
 
-	log.Println("flushing meta - : ", builder.blockMetas)
+	log.Println("flushing - block: ", newBlock)
+	log.Println("flushing - block encode : ", newBlock.Encode())
+	log.Println("flushing - meta - : ", newBlockMeta)
+	log.Println("flushing - meta encode : ", newBlockMeta.Encode())
 
-	builder.blockBuilder.Clear()
+	builder.blockBuilder = block.NewBlockBuilder(builder.maxBlockSize)
 }
 
-func (builder *TableBuilder) BuildTable(id int, path string) *Table {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		log.Println("file open")
-		return nil
-	}
-	defer file.Close()
-
-	var buffer []byte = builder.data
+func (builder *TableBuilder) serialize() []byte {
+	buffer := builder.data
 
 	for _, meta := range builder.blockMetas {
 		encodedMeta := meta.Encode()
@@ -91,12 +138,23 @@ func (builder *TableBuilder) BuildTable(id int, path string) *Table {
 	}
 
 	offset := len(builder.data)
-
-	offsetByte := make([]byte, reflect.TypeOf(offset).Size())
+	offsetByte := make([]byte, 4)
 	binary.LittleEndian.PutUint32(offsetByte, uint32(offset))
 
 	buffer = append(buffer, offsetByte...)
 
+	return buffer
+}
+
+func (builder *TableBuilder) BuildTable(id int, path string) *Table {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Println("file open fail")
+		return nil
+	}
+	defer file.Close()
+
+	buffer := builder.serialize()
 	n, err := file.Write(buffer)
 	if err != nil || n != len(buffer) {
 		log.Println("write error")
@@ -110,6 +168,6 @@ func (builder *TableBuilder) BuildTable(id int, path string) *Table {
 		path:             path,
 		file:             file,
 		blockMetas:       builder.blockMetas,
-		blockMetasOffset: offset,
+		blockMetasOffset: len(builder.data),
 	}
 }

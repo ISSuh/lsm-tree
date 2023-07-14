@@ -1,9 +1,12 @@
 package block
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"log"
+)
 
 const (
-	lengthTypeSize = 2
+	LengthTypeSize = 2
 )
 
 type Block struct {
@@ -41,7 +44,7 @@ func (meta *BlockMeta) FirstKey() []byte {
 
 func (meta *BlockMeta) Encode() []byte {
 	var buffer []byte
-	offsetByte := make([]byte, lengthTypeSize)
+	offsetByte := make([]byte, LengthTypeSize)
 
 	binary.LittleEndian.PutUint16(offsetByte, uint16(meta.offset))
 	buffer = append(buffer, offsetByte...)
@@ -49,8 +52,9 @@ func (meta *BlockMeta) Encode() []byte {
 	return buffer
 }
 
-func (meta *BlockMeta) Decode() BlockMeta {
-
+func (meta *BlockMeta) Decode(data []byte) {
+	meta.offset = int16(binary.LittleEndian.Uint16(data[0:LengthTypeSize]))
+	meta.fistKey = data[LengthTypeSize:]
 }
 
 type BlockBuilder struct {
@@ -77,11 +81,11 @@ func (builder *BlockBuilder) Clear() {
 }
 
 func (builder *BlockBuilder) Size() int {
-	offsetByteSize := len(builder.offsets) * lengthTypeSize
+	offsetByteSize := len(builder.offsets) * LengthTypeSize
 	dataByteSize := len(builder.data)
-	entryCountByteSize := lengthTypeSize
+	// entryCountByteSize := LengthTypeSize
 
-	return offsetByteSize + dataByteSize + entryCountByteSize
+	return offsetByteSize + dataByteSize
 }
 
 func (builder *BlockBuilder) MaxBlockSize() int {
@@ -89,15 +93,15 @@ func (builder *BlockBuilder) MaxBlockSize() int {
 }
 
 func (builder *BlockBuilder) Add(key, value []byte) bool {
-	calculatedBlockSize := builder.Size() + len(key) + len(value) + (lengthTypeSize * 3)
+	calculatedBlockSize := builder.Size() + len(key) + len(value) + (LengthTypeSize * 2)
+	log.Println("blockBuilder::Add - calculatedBlockSize: ", calculatedBlockSize)
+
 	if !builder.Empty() && calculatedBlockSize > builder.MaxBlockSize() {
 		return false
 	}
 
-	builder.offsets = append(builder.offsets, int16(len(builder.data)))
-
 	var buffer []byte
-	lengthByte := make([]byte, 2)
+	lengthByte := make([]byte, LengthTypeSize)
 
 	binary.LittleEndian.PutUint16(lengthByte, uint16(len(key)))
 	buffer = append(buffer, lengthByte...)
@@ -106,12 +110,21 @@ func (builder *BlockBuilder) Add(key, value []byte) bool {
 	binary.LittleEndian.PutUint16(lengthByte, uint16(len(value)))
 	buffer = append(buffer, lengthByte...)
 	buffer = append(buffer, value...)
+
+	builder.offsets = append(builder.offsets, int16(len(builder.data)))
+	builder.data = append(builder.data, buffer...)
 	return true
 }
 
 func (builder *BlockBuilder) BuildBlock() *Block {
+	copidData := make([]byte, len(builder.data))
+	copy(copidData, builder.data)
+
+	copidOffsets := make([]int16, len(builder.offsets))
+	copy(copidOffsets, builder.offsets)
+
 	return &Block{
-		data:    builder.data,
-		offsets: builder.offsets,
+		data:    copidData,
+		offsets: copidOffsets,
 	}
 }

@@ -12,15 +12,19 @@ const (
 )
 
 type Entry struct {
+	offset int16
 }
 
 func main() {
 	fmt.Println("TEST")
 
-	builder := table.NewTableBuilder(DefaultMaxBlockSize, DefaultMaxTableSize)
-	builder.Add([]byte("test"), []byte("test"))
+	builder := table.NewTableBuilder(20, 100)
+	builder.Add([]byte("aaaa"), []byte("aaaa"))
+	builder.Add([]byte("bbbb"), []byte("bbbb"))
+	builder.Add([]byte("cccc"), []byte("cccc"))
+	builder.Add([]byte("dddd"), []byte("dddd"))
 
-	temp := builder.BuildTable(0, "./")
+	temp := builder.BuildTable(0, "./test")
 	fmt.Println(temp)
 
 }

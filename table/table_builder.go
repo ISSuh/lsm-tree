@@ -101,6 +101,7 @@ func (builder *TableBuilder) BuildTable(id int, path string) *Table {
 		id:               id,
 		path:             path,
 		file:             file,
+		fileSize:         int64(n),
 		blockMetas:       builder.blockMetas,
 		blockMetasOffset: len(builder.data),
 	}

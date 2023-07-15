@@ -26,7 +26,7 @@ func TestAdd(t *testing.T) {
 	assert.False(t, builder.Empty())
 
 	assert.Equal(t, builder.offsets[0], int16(0))
-	assert.Equal(t, builder.Size(), (1+1)*2*(1*2)+2)
+	assert.Equal(t, builder.EstimateEncodedSize(), (1+1)*2*(1*2)+2)
 }
 
 func TestIteratorNext(t *testing.T) {

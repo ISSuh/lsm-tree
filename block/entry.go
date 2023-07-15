@@ -7,14 +7,18 @@ type Entry struct {
 	value []byte
 }
 
+// entry key
 func (entry *Entry) Key() []byte {
 	return entry.key
 }
 
+// entry value
 func (entry *Entry) Value() []byte {
 	return entry.value
 }
 
+// encode key, value to
+// | keyLengh(int16) | Key([]byte)	|	ValueLengh(int16)	|	value([]byte) |
 func (entry *Entry) Encode() []byte {
 	var buffer []byte
 	lengthByte := make([]byte, LengthTypeSize)
@@ -30,6 +34,7 @@ func (entry *Entry) Encode() []byte {
 	return buffer
 }
 
+// decode entry from []byte
 func (entry *Entry) Decode(data []byte) {
 	begin, end := 0, LengthTypeSize
 	keyLen := int16(binary.LittleEndian.Uint16(data[begin:end]))

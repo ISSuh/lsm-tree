@@ -16,6 +16,7 @@ type Table struct {
 	id               int
 	path             string
 	file             *os.File
+	fileSize         int64
 	blockMetas       []block.BlockMeta
 	blockMetasOffset int
 }
@@ -28,22 +29,23 @@ func OpenTable(id int, path string) *Table {
 	}
 	defer file.Close()
 
-	table := &Table{
-		id:               id,
-		path:             path,
-		file:             file,
-		blockMetas:       make([]block.BlockMeta, 0),
-		blockMetasOffset: 0,
-	}
-
-	info, err := table.file.Stat()
+	info, err := file.Stat()
 	if err != nil {
 		logging.Error("OpenTable - invalid file. ", path)
 		return nil
 	}
 
-	table.decodeBlockMetaOffset(info.Size())
-	table.decodeBlockMetas(info.Size())
+	table := &Table{
+		id:               id,
+		path:             path,
+		file:             file,
+		fileSize:         info.Size(),
+		blockMetas:       make([]block.BlockMeta, 0),
+		blockMetasOffset: 0,
+	}
+
+	table.decodeBlockMetaOffset(table.fileSize)
+	table.decodeBlockMetas(table.fileSize)
 	return table
 }
 
@@ -72,6 +74,14 @@ func (table *Table) decodeBlockMetas(fileSize int64) {
 
 func (table *Table) Iterator() *Iterator {
 	return newTableIterator(table)
+}
+
+func (table *Table) BlockNum() int {
+	return len(table.blockMetas)
+}
+
+func (table *Table) Size() int64 {
+	return table.fileSize
 }
 
 func (table *Table) LoadBlock(index int) *block.Block {

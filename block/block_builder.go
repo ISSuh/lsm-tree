@@ -25,7 +25,7 @@ func (builder *BlockBuilder) Empty() bool {
 }
 
 // blcok size is (entries byte buffer) * (sizeof(int16) * number of offset) * (sizeof(int16))
-func (builder *BlockBuilder) Size() int {
+func (builder *BlockBuilder) EstimateEncodedSize() int {
 	dataByteSize := len(builder.data)
 	offsetByteSize := len(builder.offsets) * LengthTypeSize
 	return dataByteSize + offsetByteSize + LengthTypeSize
@@ -36,7 +36,7 @@ func (builder *BlockBuilder) MaxBlockSize() int {
 }
 
 func (builder *BlockBuilder) Add(key, value []byte) bool {
-	calculatedBlockSize := builder.Size() + len(key) + len(value) + (LengthTypeSize * 2)
+	calculatedBlockSize := builder.EstimateEncodedSize() + len(key) + len(value) + (LengthTypeSize * 2)
 	if !builder.Empty() && calculatedBlockSize > builder.MaxBlockSize() {
 		return false
 	}

@@ -2,10 +2,10 @@ package table
 
 import (
 	"encoding/binary"
-	"log"
 	"os"
 
-	block "github.com/ISSuh/lsm-tree/block"
+	"github.com/ISSuh/lsm-tree/block"
+	"github.com/ISSuh/lsm-tree/logging"
 )
 
 const (
@@ -21,9 +21,9 @@ type Table struct {
 }
 
 func OpenTable(id int, path string) *Table {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.Open(path)
 	if err != nil {
-		log.Println("file open fail")
+		logging.Error("OpenTable - file open fail. ", path)
 		return nil
 	}
 	defer file.Close()
@@ -38,7 +38,8 @@ func OpenTable(id int, path string) *Table {
 
 	info, err := table.file.Stat()
 	if err != nil {
-		log.Println("get file stat fail")
+		logging.Error("OpenTable - invalid file. ", path)
+		return nil
 	}
 
 	table.decodeBlockMetaOffset(info.Size())
@@ -50,124 +51,63 @@ func (table *Table) decodeBlockMetaOffset(fileSize int64) {
 	blockMetaOffsetByte := make([]byte, BlockMetaOffetTypeSize)
 	n, err := table.file.ReadAt(blockMetaOffsetByte, fileSize-BlockMetaOffetTypeSize)
 	if (err != nil) || (n != BlockMetaOffetTypeSize) {
-		log.Println("read error")
+		logging.Error("decodeBlockMetaOffset - read error. erro : ", err, " / size n : ", n)
+		return
 	}
 
 	table.blockMetasOffset = int(binary.LittleEndian.Uint32(blockMetaOffsetByte))
 }
 
 func (table *Table) decodeBlockMetas(fileSize int64) {
-	calculateblockMetasSize := fileSize - int64(table.blockMetasOffset-BlockMetaOffetTypeSize)
-
+	calculateblockMetasSize := fileSize - int64(table.blockMetasOffset+BlockMetaOffetTypeSize)
 	blockMetasByte := make([]byte, calculateblockMetasSize)
 	n, err := table.file.ReadAt(blockMetasByte, int64(table.blockMetasOffset))
 	if (err != nil) || (n != int(calculateblockMetasSize)) {
-		log.Println("read error")
-	}
-
-	// TODO : need decode BlockMetas from byte
-	// offset := 0
-	// for offset < calculateblockMetasSize {
-
-	// }
-}
-
-type TableBuilder struct {
-	blockBuilder *block.BlockBuilder
-	data         []byte
-	blockMetas   []block.BlockMeta
-	fistKeys     [][]byte
-	maxBlockSize int
-	maxTableSize int
-}
-
-func NewTableBuilder(maxBlockSize, maxTableSize int) *TableBuilder {
-	return &TableBuilder{
-		blockBuilder: block.NewBlockBuilder(maxBlockSize),
-		data:         make([]byte, 0),
-		blockMetas:   make([]block.BlockMeta, 0),
-		fistKeys:     make([][]byte, 0),
-		maxBlockSize: maxBlockSize,
-		maxTableSize: maxTableSize,
-	}
-}
-
-func (builder *TableBuilder) Size() int {
-	return len(builder.data)
-}
-
-func (builder *TableBuilder) Add(key, value []byte) {
-	if builder.blockBuilder.Empty() {
-		builder.fistKeys = append(builder.fistKeys, key)
-	}
-
-	if builder.blockBuilder.Add(key, value) {
+		logging.Error("decodeBlockMetas - read error. erro : ", err, " / size n : ", n)
 		return
 	}
 
-	builder.flushingBlock()
-
-	// retry add
-	builder.Add(key, value)
+	table.blockMetas = block.DecodeBlockMetasFromByte(blockMetasByte)
 }
 
-func (builder *TableBuilder) flushingBlock() {
-	newBlock := builder.blockBuilder.BuildBlock()
-
-	offset := int16(len(builder.data))
-	firstKey := builder.fistKeys[len(builder.fistKeys)-1]
-	newBlockMeta := block.NewBlockMeta(offset, firstKey)
-
-	builder.blockMetas = append(builder.blockMetas, newBlockMeta)
-	builder.data = append(builder.data, newBlock.Encode()...)
-
-	log.Println("flushing - block: ", newBlock)
-	log.Println("flushing - block encode : ", newBlock.Encode())
-	log.Println("flushing - meta - : ", newBlockMeta)
-	log.Println("flushing - meta encode : ", newBlockMeta.Encode())
-
-	builder.blockBuilder = block.NewBlockBuilder(builder.maxBlockSize)
+func (table *Table) Iterator() *Iterator {
+	return newTableIterator(table)
 }
 
-func (builder *TableBuilder) serialize() []byte {
-	buffer := builder.data
-
-	for _, meta := range builder.blockMetas {
-		encodedMeta := meta.Encode()
-		buffer = append(buffer, encodedMeta...)
+func (table *Table) LoadBlock(index int) *block.Block {
+	if index >= len(table.blockMetas) {
+		logging.Error("ReadBlock - invalid index. ", index)
+		return nil
 	}
 
-	offset := len(builder.data)
-	offsetByte := make([]byte, 4)
-	binary.LittleEndian.PutUint32(offsetByte, uint32(offset))
-
-	buffer = append(buffer, offsetByte...)
-
-	return buffer
-}
-
-func (builder *TableBuilder) BuildTable(id int, path string) *Table {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.Open(table.path)
 	if err != nil {
-		log.Println("file open fail")
+		logging.Error("OpenTable - file open fail. ", table.path)
 		return nil
 	}
 	defer file.Close()
 
-	buffer := builder.serialize()
-	n, err := file.Write(buffer)
-	if err != nil || n != len(buffer) {
-		log.Println("write error")
+	table.file = file
+
+	blockOffset := int(table.blockMetas[index].Offset())
+	nextBlockOffset := 0
+
+	nextIndex := index + 1
+	if nextIndex < len(table.blockMetas) {
+		nextBlockOffset = int(table.blockMetas[nextIndex].Offset())
+	} else {
+		nextBlockOffset = int(table.blockMetasOffset)
+	}
+
+	blockSize := nextBlockOffset - blockOffset
+	blockBuffer := make([]byte, blockSize)
+	n, err := table.file.ReadAt(blockBuffer, int64(blockOffset))
+	if (err != nil) || (n != blockSize) {
+		logging.Error("decodeBlockMetas - read error. erro : ", err, " / size n : ", n)
 		return nil
 	}
 
-	log.Println("buffer : ", buffer)
-
-	return &Table{
-		id:               id,
-		path:             path,
-		file:             file,
-		blockMetas:       builder.blockMetas,
-		blockMetasOffset: len(builder.data),
-	}
+	block := &block.Block{}
+	block.Decode(blockBuffer)
+	return block
 }

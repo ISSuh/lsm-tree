@@ -49,29 +49,6 @@ func OpenTable(id int, path string) *Table {
 	return table
 }
 
-func (table *Table) decodeBlockMetaOffset(fileSize int64) {
-	blockMetaOffsetByte := make([]byte, BlockMetaOffetTypeSize)
-	n, err := table.file.ReadAt(blockMetaOffsetByte, fileSize-BlockMetaOffetTypeSize)
-	if (err != nil) || (n != BlockMetaOffetTypeSize) {
-		logging.Error("decodeBlockMetaOffset - read error. erro : ", err, " / size n : ", n)
-		return
-	}
-
-	table.blockMetasOffset = int(binary.LittleEndian.Uint32(blockMetaOffsetByte))
-}
-
-func (table *Table) decodeBlockMetas(fileSize int64) {
-	calculateblockMetasSize := fileSize - int64(table.blockMetasOffset+BlockMetaOffetTypeSize)
-	blockMetasByte := make([]byte, calculateblockMetasSize)
-	n, err := table.file.ReadAt(blockMetasByte, int64(table.blockMetasOffset))
-	if (err != nil) || (n != int(calculateblockMetasSize)) {
-		logging.Error("decodeBlockMetas - read error. erro : ", err, " / size n : ", n)
-		return
-	}
-
-	table.blockMetas = block.DecodeBlockMetasFromByte(blockMetasByte)
-}
-
 func (table *Table) Iterator() *Iterator {
 	return newTableIterator(table)
 }
@@ -120,4 +97,27 @@ func (table *Table) LoadBlock(index int) *block.Block {
 	block := &block.Block{}
 	block.Decode(blockBuffer)
 	return block
+}
+
+func (table *Table) decodeBlockMetaOffset(fileSize int64) {
+	blockMetaOffsetByte := make([]byte, BlockMetaOffetTypeSize)
+	n, err := table.file.ReadAt(blockMetaOffsetByte, fileSize-BlockMetaOffetTypeSize)
+	if (err != nil) || (n != BlockMetaOffetTypeSize) {
+		logging.Error("decodeBlockMetaOffset - read error. erro : ", err, " / size n : ", n)
+		return
+	}
+
+	table.blockMetasOffset = int(binary.LittleEndian.Uint32(blockMetaOffsetByte))
+}
+
+func (table *Table) decodeBlockMetas(fileSize int64) {
+	calculateblockMetasSize := fileSize - int64(table.blockMetasOffset+BlockMetaOffetTypeSize)
+	blockMetasByte := make([]byte, calculateblockMetasSize)
+	n, err := table.file.ReadAt(blockMetasByte, int64(table.blockMetasOffset))
+	if (err != nil) || (n != int(calculateblockMetasSize)) {
+		logging.Error("decodeBlockMetas - read error. erro : ", err, " / size n : ", n)
+		return
+	}
+
+	table.blockMetas = block.DecodeBlockMetasFromByte(blockMetasByte)
 }

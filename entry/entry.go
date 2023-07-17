@@ -1,10 +1,18 @@
-package block
+package entry
 
 import "encoding/binary"
+
+const (
+	LengthTypeSize = 2
+)
 
 type Entry struct {
 	key   []byte
 	value []byte
+}
+
+type Comparetor interface {
+	Compare(interface{}, interface{}) bool
 }
 
 // entry key

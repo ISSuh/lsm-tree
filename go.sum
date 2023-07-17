@@ -1,5 +1,7 @@
 github.com/ISSuh/skiplist v0.0.0-20230712113246-373270e9ac46 h1:8fR5hhjnF/4pWNUykuJAk5IKQrdCaqBw4a69zwCaMh4=
 github.com/ISSuh/skiplist v0.0.0-20230712113246-373270e9ac46/go.mod h1:+A7Z1uiUDB7BdHUgM+ZtYJqCiJ2deUWLh7kry7GbSBo=
+github.com/ISSuh/skiplist v0.0.0-20230712151643-4b194d0cf831 h1:wqHBtmlgNwBtih1UyVJh+D/kaXXv56Jq6deoFQwcgNg=
+github.com/ISSuh/skiplist v0.0.0-20230712151643-4b194d0cf831/go.mod h1:+A7Z1uiUDB7BdHUgM+ZtYJqCiJ2deUWLh7kry7GbSBo=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

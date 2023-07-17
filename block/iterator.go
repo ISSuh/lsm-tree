@@ -1,15 +1,19 @@
 package block
 
+import (
+	"github.com/ISSuh/lsm-tree/entry"
+)
+
 type Iterator struct {
 	blcok *Block
-	entry *Entry
+	entry *entry.Entry
 	index int
 }
 
 func newBlockIterator(block *Block) *Iterator {
 	iter := &Iterator{
 		blcok: block,
-		entry: &Entry{},
+		entry: &entry.Entry{},
 		index: -1,
 	}
 	return iter.Next()
@@ -37,9 +41,9 @@ func (iter *Iterator) Next() *Iterator {
 }
 
 func (iter *Iterator) Key() []byte {
-	return iter.entry.key
+	return iter.entry.Key()
 }
 
 func (iter *Iterator) Value() []byte {
-	return iter.entry.value
+	return iter.entry.Value()
 }

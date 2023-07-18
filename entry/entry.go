@@ -7,7 +7,7 @@ const (
 )
 
 type Entry struct {
-	key   []byte
+	key   string
 	value []byte
 }
 
@@ -16,7 +16,7 @@ type Comparetor interface {
 }
 
 // entry key
-func (entry *Entry) Key() []byte {
+func (entry *Entry) Key() string {
 	return entry.key
 }
 
@@ -33,7 +33,7 @@ func (entry *Entry) Encode() []byte {
 
 	binary.LittleEndian.PutUint16(lengthByte, uint16(len(entry.key)))
 	buffer = append(buffer, lengthByte...)
-	buffer = append(buffer, entry.key...)
+	buffer = append(buffer, []byte(entry.key)...)
 
 	binary.LittleEndian.PutUint16(lengthByte, uint16(len(entry.value)))
 	buffer = append(buffer, lengthByte...)
@@ -49,7 +49,7 @@ func (entry *Entry) Decode(data []byte) {
 
 	begin = end
 	end += int(keyLen)
-	entry.key = data[begin:end]
+	entry.key = string(data[begin:end])
 
 	begin = end
 	end += LengthTypeSize

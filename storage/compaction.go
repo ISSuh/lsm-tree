@@ -1,11 +1,12 @@
 package storage
 
 import (
+	"encoding/json"
 	"sync"
 
 	"github.com/ISSuh/lsm-tree/logging"
+	"github.com/ISSuh/lsm-tree/skiplist"
 	"github.com/ISSuh/lsm-tree/table"
-	"github.com/ISSuh/skiplist"
 )
 
 func (storage *Storage) Compact() {
@@ -48,7 +49,7 @@ func (storage *Storage) Merge(lhs, rhs string, tempMemTable *skiplist.SkipList) 
 			block := table.LoadBlock(i)
 			iter := block.Iterator()
 			for iter != nil {
-				// memTable.Set(iter.Key(), iter.Value()) //
+				tempMemTable.Set(iter.Key(), iter.Value()) //
 				iter = iter.Next()
 			}
 		}
@@ -63,11 +64,16 @@ func (storage *Storage) Merge(lhs, rhs string, tempMemTable *skiplist.SkipList) 
 }
 
 func (storage *Storage) writeToTable(tempMemTable *skiplist.SkipList) {
-	tableBuilder := table.NewTableBuilder(storage.option.blockSize, storage.option.tableSize)
+	tableBuilder := table.NewTableBuilder(storage.option.BlockSize, storage.option.TableSize)
 
 	node := tempMemTable.Front()
 	for node != nil {
-		tableBuilder.Add()
+		value, err := json.Marshal(node.Value())
+		if err != nil {
+			continue
+		}
+
+		tableBuilder.Add([]byte(node.Key()), []byte(value))
 		node = node.Next()
 	}
 }

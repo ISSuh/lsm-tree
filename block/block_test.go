@@ -49,7 +49,7 @@ func TestIteratorNext(t *testing.T) {
 		key := iter.Key()
 		value := iter.Value()
 
-		assert.Equal(t, key, []byte(strconv.Itoa(item)))
+		assert.Equal(t, key, strconv.Itoa(item))
 		assert.Equal(t, value, []byte(strconv.Itoa(item)))
 
 		iter = iter.Next()

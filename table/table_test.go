@@ -59,7 +59,7 @@ func TestLoadBlock(t *testing.T) {
 		if assert.NotNil(t, block) {
 			iter := block.Iterator()
 			if assert.NotNil(t, iter) {
-				assert.Equal(t, iter.Key(), []byte("ccc"))
+				assert.Equal(t, iter.Key(), "ccc")
 				assert.Equal(t, iter.Value(), []byte("ccc"))
 			}
 		}

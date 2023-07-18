@@ -40,7 +40,7 @@ func (iter *Iterator) Next() *Iterator {
 	return iter
 }
 
-func (iter *Iterator) Key() []byte {
+func (iter *Iterator) Key() string {
 	return iter.entry.Key()
 }
 

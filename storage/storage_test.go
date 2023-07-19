@@ -55,12 +55,13 @@ func TestSet(t *testing.T) {
 	logging.Error(option)
 	storage := NewStorage(option)
 
-	for i := 0; i <= 200; i++ {
-		random := GenRadomValue(0, 1000000)
+	for i := 0; i <= 110; i++ {
+		random := i
 		keyAndValue := strconv.Itoa(random)
 
 		storage.Set(keyAndValue, []byte(keyAndValue))
 	}
 
+	storage.Stop()
 	// ClearDbDir()
 }

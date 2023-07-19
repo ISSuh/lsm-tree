@@ -20,6 +20,10 @@ func newBlockIterator(block *Block) *Iterator {
 }
 
 func (iter *Iterator) Next() *Iterator {
+	if iter.blcok == nil {
+		return nil
+	}
+
 	iter.index++
 	if iter.index >= iter.blcok.entryNum {
 		return nil

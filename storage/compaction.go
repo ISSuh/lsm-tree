@@ -9,6 +9,17 @@ import (
 	"github.com/ISSuh/lsm-tree/table"
 )
 
+func (storage *Storage) compact(memTable *skiplist.SkipList) {
+	for level := 0; level < storage.option.Level; level++ {
+		need, fileNames := storage.needCompaction(level)
+		if need {
+			logging.Error("backgroundWork - will compact level ", level, " / ", fileNames)
+			storage.compactOnLevel(level, fileNames)
+			storage.removeMergedFile(level, fileNames)
+		}
+	}
+}
+
 func (storage *Storage) compactOnLevel(level int, fileNames []string) {
 	tempMemTable := skiplist.New(storage.option.LevelOnSkipList)
 
@@ -90,7 +101,7 @@ func (storage *Storage) buildTable(tempMemTable *skiplist.SkipList, level int) {
 			}
 
 			filePathOnLevelPrefix := filePathPrefix + strconv.Itoa(targetLevel) + "/"
-			storage.writeToFile(tableBuilder, nextLevelTableSize, filePathOnLevelPrefix)
+			storage.writeToFile(targetLevel, tableBuilder, nextLevelTableSize, filePathOnLevelPrefix)
 		}
 
 		tableBuilder.Add([]byte(node.Key()), node.Value())
@@ -99,5 +110,5 @@ func (storage *Storage) buildTable(tempMemTable *skiplist.SkipList, level int) {
 
 	// wrtie remained data to file
 	filePathOnLevelPrefix := filePathPrefix + strconv.Itoa(level) + "/"
-	storage.writeToFile(tableBuilder, nextLevelTableSize, filePathOnLevelPrefix)
+	storage.writeToFile(level, tableBuilder, nextLevelTableSize, filePathOnLevelPrefix)
 }

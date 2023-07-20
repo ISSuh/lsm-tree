@@ -20,41 +20,48 @@ type Storage struct {
 	memTable  *skiplist.SkipList
 	immuTable *skiplist.SkipList
 
-	mutex               sync.RWMutex
-	backgrounWorkSignal chan bool
-	switchTable         chan bool
-	terminateSync       sync.WaitGroup
+	mutex                  sync.RWMutex
+	backgrounCompactSignal chan bool
+	flushMemtableSignal    chan bool
+	switchTable            chan bool
+	terminateSync          sync.WaitGroup
 
-	tableId int
+	tableId map[int]int
 	tables  []*table.Table
 }
 
 func NewStorage(option Option) *Storage {
+	tableIdMap := make(map[int]int)
+	for i := 0; i < option.Level; i++ {
+		tableIdMap[i] = 0
+	}
+
 	storage := &Storage{
-		option:              option,
-		tableBuilder:        table.NewTableBuilder(option.BlockSize, option.TableSize),
-		memTable:            skiplist.New(option.LevelOnSkipList),
-		immuTable:           nil,
-		backgrounWorkSignal: make(chan bool, 100),
-		switchTable:         make(chan bool),
-		tableId:             0,
-		tables:              nil,
+		option:                 option,
+		tableBuilder:           table.NewTableBuilder(option.BlockSize, option.TableSize),
+		memTable:               skiplist.New(option.LevelOnSkipList),
+		immuTable:              nil,
+		backgrounCompactSignal: make(chan bool, 100),
+		flushMemtableSignal:    make(chan bool, 100),
+		switchTable:            make(chan bool),
+		tableId:                tableIdMap,
+		tables:                 nil,
 	}
 
 	if !storage.createLevelDirectory() {
 		return nil
 	}
 
-	storage.terminateSync.Add(1)
-	go storage.backgroundWork()
+	storage.terminateSync.Add(2)
+	go storage.backgroundCompact()
+	go storage.flushMemTable()
 	return storage
 }
 
 func (storage *Storage) Set(key string, value []byte) {
 	storage.memTable.Set(key, value)
 	if storage.memTable.Size() >= uint64(storage.option.MemTableSize) {
-		storage.backgrounWorkSignal <- true
-
+		storage.flushMemtableSignal <- true
 		logging.Error("Set - ", storage.memTable.Size(), " / ", storage.option.MemTableSize)
 		<-storage.switchTable
 	}
@@ -68,46 +75,47 @@ func (storage *Storage) Remove(key string) {
 }
 
 func (storage *Storage) Stop() {
-	storage.backgrounWorkSignal <- false
+	storage.flushMemtableSignal <- false
+	storage.backgrounCompactSignal <- false
 	storage.terminateSync.Wait()
 
-	storage.compact(storage.memTable)
+	// storage.compact(storage.memTable)
 }
 
-func (storage *Storage) flush() {
-	storage.backgrounWorkSignal <- true
-	<-storage.switchTable
-}
-
-func (storage *Storage) backgroundWork() {
-	for signal := range storage.backgrounWorkSignal {
-		if !signal {
-			logging.Info("backgroundWork - signal is false.", signal)
-			break
-		}
+func (storage *Storage) flushMemTable() {
+	for run := range storage.flushMemtableSignal {
+		logging.Info("flushMemTable - poasjdpa")
 
 		immuTable := storage.memTable
 		storage.memTable = skiplist.New(storage.option.LevelOnSkipList)
-		storage.switchTable <- true
+		if run {
+			storage.switchTable <- true
+		}
 
-		storage.compact(immuTable)
+		storage.writeLevel0Table(immuTable)
+
+		if !run {
+			logging.Info("flushMemTable - signal is false.", run)
+			break
+		}
 	}
 
 	storage.terminateSync.Done()
-	logging.Error("backgroundWork - done")
+	logging.Error("flushMemTable - done")
 }
 
-func (storage *Storage) compact(memTable *skiplist.SkipList) {
-	storage.writeLevel0Table(memTable)
+func (storage *Storage) backgroundCompact() {
+	for run := range storage.backgrounCompactSignal {
+		// storage.compact(immuTable)
 
-	for level := 0; level < storage.option.Level; level++ {
-		need, fileNames := storage.needCompaction(level)
-		if need {
-			logging.Error("backgroundWork - will compact level ", level, " / ", fileNames)
-			storage.compactOnLevel(level, fileNames)
-			storage.removeMergedFile(level, fileNames)
+		if !run {
+			logging.Info("backgroundCompact - signal is false.", run)
+			break
 		}
 	}
+
+	storage.terminateSync.Done()
+	logging.Error("backgroundCompact - done")
 }
 
 func (storage *Storage) writeLevel0Table(memTable *skiplist.SkipList) {
@@ -121,7 +129,7 @@ func (storage *Storage) writeLevel0Table(memTable *skiplist.SkipList) {
 
 		if storage.tableBuilder.Size() >= storage.option.TableSize {
 			logging.Error("writeLevel0Table - ", storage.tableBuilder.Size(), " / ", storage.option.TableSize)
-			storage.writeToFile(storage.tableBuilder, storage.option.TableSize, filePathPrefix)
+			storage.writeToFile(0, storage.tableBuilder, storage.option.TableSize, filePathPrefix)
 		}
 
 		storage.tableBuilder.Add([]byte(node.Key()), node.Value())
@@ -129,7 +137,7 @@ func (storage *Storage) writeLevel0Table(memTable *skiplist.SkipList) {
 	}
 
 	// wrtie remained data to filez
-	storage.writeToFile(storage.tableBuilder, storage.option.TableSize, filePathPrefix)
+	storage.writeToFile(0, storage.tableBuilder, storage.option.TableSize, filePathPrefix)
 }
 
 func (storage *Storage) needCompaction(level int) (bool, []string) {
@@ -174,11 +182,12 @@ func (storage *Storage) removeMergedFile(level int, fileNames []string) {
 	}
 }
 
-func (storage *Storage) writeToFile(tableBuilder *table.TableBuilder, nextLevelTableSize int, filePathPrefix string) {
-	file := filePathPrefix + strconv.Itoa(storage.tableId) + ".db"
-	newTable := tableBuilder.BuildTable(storage.tableId, file)
+func (storage *Storage) writeToFile(level int, tableBuilder *table.TableBuilder, nextLevelTableSize int, filePathPrefix string) {
+	file := filePathPrefix + strconv.Itoa(storage.tableId[level]) + ".db"
+	newTable := tableBuilder.BuildTable(storage.tableId[level], file)
 	storage.tables = append(storage.tables, newTable)
 
+	// change to new TableBuilder
 	tableBuilder = table.NewTableBuilder(storage.option.BlockSize, nextLevelTableSize)
-	storage.tableId++
+	storage.tableId[level]++
 }

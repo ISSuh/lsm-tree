@@ -38,7 +38,6 @@ func NewStorage(option Option) *Storage {
 
 	storage := &Storage{
 		option:                 option,
-		tableBuilder:           table.NewTableBuilder(option.BlockSize, option.TableSize),
 		memTable:               skiplist.New(option.LevelOnSkipList),
 		immuTable:              nil,
 		backgrounCompactSignal: make(chan bool, 100),
@@ -62,7 +61,6 @@ func (storage *Storage) Set(key string, value []byte) {
 	storage.memTable.Set(key, value)
 	if storage.memTable.Size() >= uint64(storage.option.MemTableSize) {
 		storage.flushMemtableSignal <- true
-		logging.Error("Set - ", storage.memTable.Size(), " / ", storage.option.MemTableSize)
 		<-storage.switchTable
 	}
 }
@@ -84,8 +82,6 @@ func (storage *Storage) Stop() {
 
 func (storage *Storage) flushMemTable() {
 	for run := range storage.flushMemtableSignal {
-		logging.Info("flushMemTable - poasjdpa")
-
 		immuTable := storage.memTable
 		storage.memTable = skiplist.New(storage.option.LevelOnSkipList)
 		if run {
@@ -106,7 +102,7 @@ func (storage *Storage) flushMemTable() {
 
 func (storage *Storage) backgroundCompact() {
 	for run := range storage.backgrounCompactSignal {
-		// storage.compact(immuTable)
+		storage.compact()
 
 		if !run {
 			logging.Info("backgroundCompact - signal is false.", run)
@@ -119,25 +115,21 @@ func (storage *Storage) backgroundCompact() {
 }
 
 func (storage *Storage) writeLevel0Table(memTable *skiplist.SkipList) {
-	logging.Error("writeLevel0Table")
-
 	filePathPrefix := storage.option.Path + "/0/"
+	tableBuilder := table.NewTableBuilder(storage.option.BlockSize, storage.option.TableSize)
 
 	node := memTable.Front()
 	for node != nil {
-		logging.Error("writeLevel0Table - key : ", node.Key())
-
-		if storage.tableBuilder.Size() >= storage.option.TableSize {
-			logging.Error("writeLevel0Table - ", storage.tableBuilder.Size(), " / ", storage.option.TableSize)
-			storage.writeToFile(0, storage.tableBuilder, storage.option.TableSize, filePathPrefix)
+		if tableBuilder.Size() >= storage.option.TableSize {
+			storage.writeToFile(0, tableBuilder, storage.option.TableSize, filePathPrefix)
 		}
 
-		storage.tableBuilder.Add([]byte(node.Key()), node.Value())
+		tableBuilder.Add([]byte(node.Key()), node.Value())
 		node = node.Next()
 	}
 
 	// wrtie remained data to filez
-	storage.writeToFile(0, storage.tableBuilder, storage.option.TableSize, filePathPrefix)
+	storage.writeToFile(0, tableBuilder, storage.option.TableSize, filePathPrefix)
 }
 
 func (storage *Storage) needCompaction(level int) (bool, []string) {

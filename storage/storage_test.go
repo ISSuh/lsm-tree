@@ -55,7 +55,7 @@ func TestSet(t *testing.T) {
 	logging.Error(option)
 	storage := NewStorage(option)
 
-	for i := 0; i <= 110; i++ {
+	for i := 0; i <= 500; i++ {
 		random := i
 		keyAndValue := strconv.Itoa(random)
 

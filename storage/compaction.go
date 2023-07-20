@@ -9,7 +9,7 @@ import (
 	"github.com/ISSuh/lsm-tree/table"
 )
 
-func (storage *Storage) compact(memTable *skiplist.SkipList) {
+func (storage *Storage) compact() {
 	for level := 0; level < storage.option.Level; level++ {
 		need, fileNames := storage.needCompaction(level)
 		if need {
@@ -35,7 +35,7 @@ func (storage *Storage) compactOnLevel(level int, fileNames []string) {
 			block := table.LoadBlock(i)
 			iter := block.Iterator()
 			for iter != nil {
-				tempMemTable.Set(iter.Key(), iter.Value()) //
+				tempMemTable.Set(iter.Key(), iter.Value())
 				iter = iter.Next()
 			}
 		}
@@ -84,16 +84,18 @@ func (storage *Storage) concurrentMerge(lhs, rhs string, tempMemTable *skiplist.
 
 func (storage *Storage) buildTable(tempMemTable *skiplist.SkipList, level int) {
 	nextLevel := level + 1
-	tableBuilder := table.NewTableBuilder(storage.option.BlockSize, storage.option.TableSize)
-	filePathPrefix := storage.option.Path + "/"
 	nextLevelTableSize := storage.option.TableSize * (nextLevel * storage.option.TableSizeOffset)
+	tableBuilder := table.NewTableBuilder(storage.option.BlockSize, nextLevelTableSize)
+	filePathPrefix := storage.option.Path + "/"
 
 	node := tempMemTable.Front()
 	for node != nil {
-		logging.Error("buildTable - ", storage.tableBuilder.Size(), " / ", nextLevelTableSize)
-		if tableBuilder.Size() >= nextLevelTableSize {
-			// logging.Error("buildTable - ", storage.tableBuilder.Size(), " / ", nextLevelTableSize)
+		if len(node.Key()) <= 0 {
+			node = node.Next()
+			continue
+		}
 
+		if tableBuilder.Size() >= nextLevelTableSize {
 			targetLevel := level
 			need, _ := storage.needCompaction(level)
 			if need {
@@ -109,6 +111,6 @@ func (storage *Storage) buildTable(tempMemTable *skiplist.SkipList, level int) {
 	}
 
 	// wrtie remained data to file
-	filePathOnLevelPrefix := filePathPrefix + strconv.Itoa(level) + "/"
-	storage.writeToFile(level, tableBuilder, nextLevelTableSize, filePathOnLevelPrefix)
+	filePathOnLevelPrefix := filePathPrefix + strconv.Itoa(nextLevel) + "/"
+	storage.writeToFile(nextLevel, tableBuilder, nextLevelTableSize, filePathOnLevelPrefix)
 }

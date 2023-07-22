@@ -153,12 +153,12 @@ func (list *SkipList) Set(key string, value []byte) {
 	list.insertNode(key, value, list.history)
 }
 
-func (list *SkipList) Get(key string) *SkipListItem {
+func (list *SkipList) Get(key string) []byte {
 	node := list.findInternal(key, list.history)
 	if node == nil {
 		return nil
 	}
-	return &node.item
+	return node.item.value
 }
 
 func (list *SkipList) Remove(key string) {

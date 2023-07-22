@@ -53,6 +53,20 @@ func (table *Table) Iterator() *Iterator {
 	return newTableIterator(table)
 }
 
+func (table *Table) NewTableLeader() *TableLeader {
+	return &TableLeader{
+		table: table,
+	}
+}
+
+func (table *Table) Id() int {
+	return table.id
+}
+
+func (table *Table) Metas() []block.BlockMeta {
+	return table.blockMetas
+}
+
 func (table *Table) BlockNum() int {
 	return len(table.blockMetas)
 }
@@ -120,4 +134,45 @@ func (table *Table) decodeBlockMetas(fileSize int64) {
 	}
 
 	table.blockMetas = block.DecodeBlockMetasFromByte(blockMetasByte)
+}
+
+type TableLeader struct {
+	table *Table
+}
+
+func (leader *TableLeader) Get(key string) []byte {
+	blockIndex := leader.findApproximateBlock(key)
+	if blockIndex < 0 {
+		return nil
+	}
+
+	block := leader.table.LoadBlock(blockIndex)
+	if block == nil {
+		return nil
+	}
+
+	return leader.searchOnBlock(key, block)
+}
+
+func (leader *TableLeader) findApproximateBlock(key string) int {
+	blockIndex := -1
+	for index, meta := range leader.table.blockMetas {
+		firstKey := string(meta.FirstKey()[:])
+		if key <= firstKey {
+			blockIndex = index
+			break
+		}
+	}
+	return blockIndex
+}
+
+func (leader *TableLeader) searchOnBlock(key string, block *block.Block) []byte {
+	iter := block.Iterator()
+	for iter != nil {
+		if key == iter.Key() {
+			return iter.Value()
+		}
+		iter = iter.Next()
+	}
+	return nil
 }

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"io/ioutil"
 	"strconv"
 	"sync"
 
@@ -9,13 +10,32 @@ import (
 	"github.com/ISSuh/lsm-tree/table"
 )
 
+func (storage *Storage) needCompaction(level int) (bool, []string) {
+	levelDirPath := storage.option.Path + "/" + strconv.Itoa(level)
+	files, err := ioutil.ReadDir(levelDirPath)
+	if err != nil {
+		logging.Error("checkNeedCompaction - can not read dir", levelDirPath, ", err : ", err)
+		return false, nil
+	}
+
+	if len(files) < storage.option.LimitedFilesNum[level] {
+		return false, nil
+	}
+
+	var fileNames []string
+	for _, file := range files {
+		fileNames = append(fileNames, file.Name())
+	}
+	return true, fileNames
+}
+
 func (storage *Storage) compact() {
 	for level := 0; level < storage.option.Level; level++ {
 		need, fileNames := storage.needCompaction(level)
 		if need {
 			logging.Error("backgroundWork - will compact level ", level, " / ", fileNames)
 			storage.compactOnLevel(level, fileNames)
-			storage.removeMergedFile(level, fileNames)
+			// util.RemoveMergedFile(storage.option.Path, level, fileNames)
 		}
 	}
 }

@@ -1,15 +1,13 @@
 package storage
 
 import (
-	"io/ioutil"
-	"os"
-	"path/filepath"
 	"strconv"
 	"sync"
 
 	"github.com/ISSuh/lsm-tree/logging"
 	"github.com/ISSuh/lsm-tree/skiplist"
 	"github.com/ISSuh/lsm-tree/table"
+	"github.com/ISSuh/lsm-tree/util"
 )
 
 type Storage struct {
@@ -20,14 +18,16 @@ type Storage struct {
 	memTable  *skiplist.SkipList
 	immuTable *skiplist.SkipList
 
-	mutex                  sync.RWMutex
-	backgrounCompactSignal chan bool
+	memTableMutex sync.RWMutex
+	tableMutex    sync.RWMutex
+
+	backgrounCompactSignal chan int
 	flushMemtableSignal    chan bool
 	switchTable            chan bool
 	terminateSync          sync.WaitGroup
 
 	tableId map[int]int
-	tables  []*table.Table
+	tables  [][]*table.Table
 }
 
 func NewStorage(option Option) *Storage {
@@ -36,18 +36,23 @@ func NewStorage(option Option) *Storage {
 		tableIdMap[i] = 0
 	}
 
+	tables := make([][]*table.Table, option.Level)
+	for i := range tables {
+		tables[i] = make([]*table.Table, 0)
+	}
+
 	storage := &Storage{
 		option:                 option,
 		memTable:               skiplist.New(option.LevelOnSkipList),
 		immuTable:              nil,
-		backgrounCompactSignal: make(chan bool, 100),
+		backgrounCompactSignal: make(chan int, 100),
 		flushMemtableSignal:    make(chan bool, 100),
 		switchTable:            make(chan bool),
 		tableId:                tableIdMap,
-		tables:                 nil,
+		tables:                 tables,
 	}
 
-	if !storage.createLevelDirectory() {
+	if !util.CreateLevelDirectory(option.Path, option.Level) {
 		return nil
 	}
 
@@ -66,7 +71,22 @@ func (storage *Storage) Set(key string, value []byte) {
 }
 
 func (storage *Storage) Get(key string) []byte {
-	return []byte("")
+	var data []byte = nil
+
+	// find on memtabe
+	data = storage.findAtMemTable(key, storage.memTable)
+	if data != nil {
+		return data
+	}
+
+	// find on immutabe
+	data = storage.findAtMemTable(key, storage.immuTable)
+	if data != nil {
+		return data
+	}
+
+	// find on tabkes
+	return storage.findAtTable(key)
 }
 
 func (storage *Storage) Remove(key string) {
@@ -74,7 +94,7 @@ func (storage *Storage) Remove(key string) {
 
 func (storage *Storage) Stop() {
 	storage.flushMemtableSignal <- false
-	storage.backgrounCompactSignal <- false
+	storage.backgrounCompactSignal <- -1
 	storage.terminateSync.Wait()
 
 	// storage.compact(storage.memTable)
@@ -82,13 +102,31 @@ func (storage *Storage) Stop() {
 
 func (storage *Storage) flushMemTable() {
 	for run := range storage.flushMemtableSignal {
-		immuTable := storage.memTable
-		storage.memTable = skiplist.New(storage.option.LevelOnSkipList)
+		logging.Info("flushMemTable - flushing")
+		level := 0
+
+		{
+			storage.memTableMutex.Lock()
+			storage.immuTable = storage.memTable
+			storage.memTable = skiplist.New(storage.option.LevelOnSkipList)
+			storage.memTableMutex.Unlock()
+		}
+
 		if run {
 			storage.switchTable <- true
 		}
 
-		storage.writeLevel0Table(immuTable)
+		storage.flushingToLevel0Table(storage.immuTable)
+
+		{
+			storage.memTableMutex.Lock()
+			storage.immuTable = nil
+			storage.memTableMutex.Unlock()
+		}
+
+		if len(storage.tables[level]) >= storage.option.LimitedFilesNum[level] {
+			storage.backgrounCompactSignal <- level
+		}
 
 		if !run {
 			logging.Info("flushMemTable - signal is false.", run)
@@ -101,11 +139,11 @@ func (storage *Storage) flushMemTable() {
 }
 
 func (storage *Storage) backgroundCompact() {
-	for run := range storage.backgrounCompactSignal {
+	for level := range storage.backgrounCompactSignal {
 		storage.compact()
 
-		if !run {
-			logging.Info("backgroundCompact - signal is false.", run)
+		if level < 0 {
+			logging.Info("backgroundCompact - signal is false.", level)
 			break
 		}
 	}
@@ -114,7 +152,7 @@ func (storage *Storage) backgroundCompact() {
 	logging.Error("backgroundCompact - done")
 }
 
-func (storage *Storage) writeLevel0Table(memTable *skiplist.SkipList) {
+func (storage *Storage) flushingToLevel0Table(memTable *skiplist.SkipList) {
 	filePathPrefix := storage.option.Path + "/0/"
 	tableBuilder := table.NewTableBuilder(storage.option.BlockSize, storage.option.TableSize)
 
@@ -132,54 +170,73 @@ func (storage *Storage) writeLevel0Table(memTable *skiplist.SkipList) {
 	storage.writeToFile(0, tableBuilder, storage.option.TableSize, filePathPrefix)
 }
 
-func (storage *Storage) needCompaction(level int) (bool, []string) {
-	levelDirPath := storage.option.Path + "/" + strconv.Itoa(level)
-	files, err := ioutil.ReadDir(levelDirPath)
-	if err != nil {
-		logging.Error("checkNeedCompaction - can not read dir", levelDirPath, ", err : ", err)
-		return false, nil
-	}
-
-	if len(files) < storage.option.LimitedFilesNum[level] {
-		return false, nil
-	}
-
-	var fileNames []string
-	for _, file := range files {
-		fileNames = append(fileNames, file.Name())
-	}
-	return true, fileNames
-}
-
-func (storage *Storage) createLevelDirectory() bool {
-	for i := 0; i <= storage.option.Level; i++ {
-		path := filepath.Join(storage.option.Path, strconv.Itoa(i))
-		err := os.MkdirAll(path, os.ModePerm)
-		if err != nil {
-			logging.Error("checkNeedCompaction - can not read dir", path, ", err : ", err)
-			return false
-		}
-	}
-	return true
-}
-
-func (storage *Storage) removeMergedFile(level int, fileNames []string) {
-	filePathPrefix := storage.option.Path + "/" + strconv.Itoa(level) + "/"
-	for _, fileName := range fileNames {
-		file := filePathPrefix + fileName
-		_, err := os.Stat(file)
-		if err == nil {
-			os.Remove(file)
-		}
-	}
-}
-
 func (storage *Storage) writeToFile(level int, tableBuilder *table.TableBuilder, nextLevelTableSize int, filePathPrefix string) {
+	storage.tableMutex.Lock()
+	defer storage.tableMutex.Unlock()
+
 	file := filePathPrefix + strconv.Itoa(storage.tableId[level]) + ".db"
 	newTable := tableBuilder.BuildTable(storage.tableId[level], file)
-	storage.tables = append(storage.tables, newTable)
+	storage.tables[level] = append(storage.tables[level], newTable)
 
 	// change to new TableBuilder
 	tableBuilder = table.NewTableBuilder(storage.option.BlockSize, nextLevelTableSize)
 	storage.tableId[level]++
+}
+
+func (storage *Storage) findAtMemTable(key string, memTable *skiplist.SkipList) []byte {
+	storage.memTableMutex.Lock()
+	defer storage.memTableMutex.Unlock()
+
+	if memTable == nil {
+		return nil
+	}
+
+	if memTable != nil {
+		data := memTable.Get(key)
+		if data != nil {
+			return data
+		}
+	}
+	return nil
+}
+
+func (storage *Storage) findAtTable(key string) []byte {
+	storage.tableMutex.Lock()
+	defer storage.tableMutex.Unlock()
+
+	totalTableNum := 0
+	for level := 0; level < storage.option.Level; level++ {
+		totalTableNum += len(storage.tables[level])
+	}
+
+	type Result struct {
+		value   []byte
+		tableId int
+	}
+
+	resultQueue := make(chan Result, totalTableNum)
+	var wg sync.WaitGroup
+
+	wg.Add(totalTableNum)
+	for level := 0; level < storage.option.Level; level++ {
+		for _, item := range storage.tables[level] {
+			go func(table *table.Table) {
+				defer wg.Done()
+				leader := table.NewTableLeader()
+				value := leader.Get(key)
+
+				if value != nil {
+					resultQueue <- Result{value: value, tableId: table.Id()}
+				}
+			}(item)
+		}
+	}
+	wg.Wait()
+	close(resultQueue)
+
+	var value []byte = nil
+	for item := range resultQueue {
+		value = item.value
+	}
+	return value
 }

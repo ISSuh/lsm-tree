@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ISSuh/lsm-tree/logging"
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -55,11 +56,23 @@ func TestSet(t *testing.T) {
 	logging.Error(option)
 	storage := NewStorage(option)
 
-	for i := 0; i <= 500; i++ {
+	for i := 0; i <= 100; i++ {
 		random := i
 		keyAndValue := strconv.Itoa(random)
 
 		storage.Set(keyAndValue, []byte(keyAndValue))
+	}
+
+	logging.Error("run Get")
+
+	for i := 0; i <= 100; i++ {
+		random := i
+		keyAndValue := strconv.Itoa(random)
+
+		data := storage.Get(keyAndValue)
+		if assert.NotNil(t, data) {
+			assert.Equal(t, string(data), keyAndValue)
+		}
 	}
 
 	storage.Stop()

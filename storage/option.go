@@ -24,7 +24,7 @@ type Option struct {
 	// limited number of files on level
 	// key is level, value is limited number
 	// the last level has unlimit number of files
-	LimitedFilesNum map[int]int
+	LimitedFilesNumOnL0 int
 
 	// offset of calculated table size whne inscrease level
 	// if tableSize value is 10Mb and tableSizeOffset value is 10,
@@ -40,16 +40,13 @@ type Option struct {
 
 func NewOption() Option {
 	return Option{
-		Path:      "./",
-		Level:     2,
-		BlockSize: 10 * B,
-		TableSize: 1 * KB, // 1KB
-		LimitedFilesNum: map[int]int{
-			0: 2,
-			1: 4,
-		},
-		TableSizeOffset: 10,
-		LevelOnSkipList: 5,
-		MemTableSize:    100 * B,
+		Path:                "./",
+		Level:               2,
+		BlockSize:           10 * B,
+		TableSize:           1 * KB, // 1KB
+		LimitedFilesNumOnL0: 2,
+		TableSizeOffset:     10,
+		LevelOnSkipList:     5,
+		MemTableSize:        100 * B,
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ISSuh/lsm-tree/logging"
+	"github.com/ISSuh/lsm-tree/table"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -77,4 +78,49 @@ func TestSet(t *testing.T) {
 
 	storage.Stop()
 	// ClearDbDir()
+}
+
+func TestSet2(t *testing.T) {
+	ClearDbDir()
+
+	option := NewOption()
+	option.Path = DbPath
+	option.BlockSize = 15
+	option.LimitedFilesNumOnL0 = 1
+
+	logging.Error(option)
+	storage := NewStorage(option)
+
+	tableBuilder := table.NewTableBuilder(option.BlockSize)
+	tableBuilder.Add([]byte("0"), []byte("0"))
+	tableBuilder.Add([]byte("1"), []byte("1"))
+	tableBuilder.Add([]byte("2"), []byte("2"))
+	table1 := tableBuilder.BuildTable(0, DbPath+"/1/0.db")
+	assert.NotEqual(t, table1, (*table.Table)(nil))
+
+	tableBuilder = table.NewTableBuilder(option.BlockSize)
+	tableBuilder.Add([]byte("3"), []byte("3"))
+	tableBuilder.Add([]byte("4"), []byte("4"))
+	tableBuilder.Add([]byte("5"), []byte("5"))
+	table2 := tableBuilder.BuildTable(1, DbPath+"/1/1.db")
+	assert.NotEqual(t, table2, (*table.Table)(nil))
+
+	tableBuilder = table.NewTableBuilder(option.BlockSize)
+	tableBuilder.Add([]byte("6"), []byte("6"))
+	tableBuilder.Add([]byte("7"), []byte("7"))
+	tableBuilder.Add([]byte("8"), []byte("8"))
+	table3 := tableBuilder.BuildTable(2, DbPath+"/1/2.db")
+	assert.NotEqual(t, table3, (*table.Table)(nil))
+
+	storage.tables[1] = append(storage.tables[1], table1, table2, table3)
+
+	for i := 2; i <= 4; i++ {
+		keyAndValue := strconv.Itoa(i)
+		storage.Set(keyAndValue, []byte(keyAndValue))
+	}
+
+	storage.flushMemtableSignal <- true
+	<-storage.switchTable
+
+	time.Sleep(1000 * time.Millisecond)
 }

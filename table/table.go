@@ -63,6 +63,13 @@ func (table *Table) Id() int {
 	return table.id
 }
 
+func (table *Table) FirstKey() string {
+	if len(table.blockMetas) <= 0 {
+		return ""
+	}
+	return string(table.blockMetas[0].FirstKey())
+}
+
 func (table *Table) Metas() []block.BlockMeta {
 	return table.blockMetas
 }

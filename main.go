@@ -18,7 +18,7 @@ type Entry struct {
 func main() {
 	fmt.Println("TEST")
 
-	builder := table.NewTableBuilder(24, 100)
+	builder := table.NewTableBuilder(24)
 	builder.Add([]byte("aaa"), []byte("aaa"))
 	builder.Add([]byte("bbb"), []byte("bbb"))
 	builder.Add([]byte("ccc"), []byte("ccc"))

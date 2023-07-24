@@ -124,7 +124,7 @@ func (storage *Storage) flushMemTable() {
 			storage.memTableMutex.Unlock()
 		}
 
-		if len(storage.tables[level]) >= storage.option.LimitedFilesNum[level] {
+		if len(storage.tables[level]) >= storage.option.LimitedFilesNumOnL0 {
 			storage.backgrounCompactSignal <- level
 		}
 
@@ -140,7 +140,12 @@ func (storage *Storage) flushMemTable() {
 
 func (storage *Storage) backgroundCompact() {
 	for level := range storage.backgrounCompactSignal {
-		storage.compact()
+		logging.Info("flushMemTable - compaction == ", level)
+
+		if level == 0 {
+			storage.compact(level)
+		} else {
+		}
 
 		if level < 0 {
 			logging.Info("backgroundCompact - signal is false.", level)
@@ -154,7 +159,7 @@ func (storage *Storage) backgroundCompact() {
 
 func (storage *Storage) flushingToLevel0Table(memTable *skiplist.SkipList) {
 	filePathPrefix := storage.option.Path + "/0/"
-	tableBuilder := table.NewTableBuilder(storage.option.BlockSize, storage.option.TableSize)
+	tableBuilder := table.NewTableBuilder(storage.option.BlockSize)
 
 	node := memTable.Front()
 	for node != nil {
@@ -179,7 +184,7 @@ func (storage *Storage) writeToFile(level int, tableBuilder *table.TableBuilder,
 	storage.tables[level] = append(storage.tables[level], newTable)
 
 	// change to new TableBuilder
-	tableBuilder = table.NewTableBuilder(storage.option.BlockSize, nextLevelTableSize)
+	tableBuilder = table.NewTableBuilder(storage.option.BlockSize)
 	storage.tableId[level]++
 }
 

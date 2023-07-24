@@ -14,7 +14,7 @@ func TestDecode(t *testing.T) {
 		os.Remove(path)
 	}
 
-	builder := NewTableBuilder(12, 100)
+	builder := NewTableBuilder(12)
 	builder.Add([]byte("aaa"), []byte("aaa"))
 	builder.Add([]byte("bbb"), []byte("bbb"))
 	builder.Add([]byte("ccc"), []byte("ccc"))
@@ -45,7 +45,7 @@ func TestLoadBlock(t *testing.T) {
 		os.Remove(path)
 	}
 
-	builder := NewTableBuilder(10, 100)
+	builder := NewTableBuilder(10)
 	builder.Add([]byte("aaa"), []byte("aaa"))
 	builder.Add([]byte("bbb"), []byte("bbb"))
 	builder.Add([]byte("ccc"), []byte("ccc"))

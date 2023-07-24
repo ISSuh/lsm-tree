@@ -14,17 +14,15 @@ type TableBuilder struct {
 	blockMetas   []block.BlockMeta
 	fistKeys     [][]byte
 	maxBlockSize int
-	maxTableSize int
 }
 
-func NewTableBuilder(maxBlockSize, maxTableSize int) *TableBuilder {
+func NewTableBuilder(maxBlockSize int) *TableBuilder {
 	return &TableBuilder{
 		blockBuilder: block.NewBlockBuilder(maxBlockSize),
 		data:         make([]byte, 0),
 		blockMetas:   make([]block.BlockMeta, 0),
 		fistKeys:     make([][]byte, 0),
 		maxBlockSize: maxBlockSize,
-		maxTableSize: maxTableSize,
 	}
 }
 
@@ -89,6 +87,8 @@ func (builder *TableBuilder) BuildTable(id int, path string) *Table {
 		return nil
 	}
 	defer file.Close()
+
+	builder.flushingBlock()
 
 	buffer := builder.encode()
 	n, err := file.Write(buffer)

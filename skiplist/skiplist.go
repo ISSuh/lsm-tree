@@ -28,10 +28,16 @@ type SkipListNode struct {
 }
 
 func (node *SkipListNode) Next() *SkipListNode {
+	if node.nextNode[0] != nil && node.nextNode[0].isEndNode {
+		return nil
+	}
 	return node.nextNode[0]
 }
 
 func (node *SkipListNode) Prev() *SkipListNode {
+	if node.prevNode[0] != nil && node.prevNode[0].isEndNode {
+		return nil
+	}
 	return node.prevNode[0]
 }
 

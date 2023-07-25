@@ -100,6 +100,21 @@ func (storage *Storage) Stop() {
 	// storage.compact(storage.memTable)
 }
 
+func (storage *Storage) eraseOldTable(level int, oldTable []*table.Table) {
+	for _, targetTable := range oldTable {
+		storage.eraseTableById(level, targetTable.Id())
+	}
+}
+
+func (storage *Storage) eraseTableById(level, tableId int) {
+	for i, targetTable := range storage.tables[level] {
+		if targetTable.Id() == tableId {
+			storage.tables[level] = append(storage.tables[level][:i], storage.tables[level][i+1:]...)
+			break
+		}
+	}
+}
+
 func (storage *Storage) flushMemTable() {
 	for run := range storage.flushMemtableSignal {
 		logging.Info("flushMemTable - flushing")
@@ -116,7 +131,7 @@ func (storage *Storage) flushMemTable() {
 			storage.switchTable <- true
 		}
 
-		storage.flushingToLevel0Table(storage.immuTable)
+		storage.flushing(0, storage.immuTable)
 
 		{
 			storage.memTableMutex.Lock()
@@ -135,17 +150,13 @@ func (storage *Storage) flushMemTable() {
 	}
 
 	storage.terminateSync.Done()
-	logging.Error("flushMemTable - done")
+	logging.Info("flushMemTable - done")
 }
 
 func (storage *Storage) backgroundCompact() {
 	for level := range storage.backgrounCompactSignal {
-		logging.Info("flushMemTable - compaction == ", level)
-
-		if level == 0 {
-			storage.compact(level)
-		} else {
-		}
+		logging.Info("flushMemTable - compaction level ", level)
+		storage.compact(level)
 
 		if level < 0 {
 			logging.Info("backgroundCompact - signal is false.", level)
@@ -154,17 +165,17 @@ func (storage *Storage) backgroundCompact() {
 	}
 
 	storage.terminateSync.Done()
-	logging.Error("backgroundCompact - done")
+	logging.Info("backgroundCompact - done")
 }
 
-func (storage *Storage) flushingToLevel0Table(memTable *skiplist.SkipList) {
-	filePathPrefix := storage.option.Path + "/0/"
+func (storage *Storage) flushing(targetLevel int, memTable *skiplist.SkipList) {
+	filePathPrefix := storage.option.Path + "/" + strconv.Itoa(targetLevel) + "/"
 	tableBuilder := table.NewTableBuilder(storage.option.BlockSize)
 
 	node := memTable.Front()
 	for node != nil {
 		if tableBuilder.Size() >= storage.option.TableSize {
-			storage.writeToFile(0, tableBuilder, storage.option.TableSize, filePathPrefix)
+			storage.writeToFile(targetLevel, tableBuilder, storage.option.TableSize, filePathPrefix)
 		}
 
 		tableBuilder.Add([]byte(node.Key()), node.Value())
@@ -172,7 +183,7 @@ func (storage *Storage) flushingToLevel0Table(memTable *skiplist.SkipList) {
 	}
 
 	// wrtie remained data to filez
-	storage.writeToFile(0, tableBuilder, storage.option.TableSize, filePathPrefix)
+	storage.writeToFile(targetLevel, tableBuilder, storage.option.TableSize, filePathPrefix)
 }
 
 func (storage *Storage) writeToFile(level int, tableBuilder *table.TableBuilder, nextLevelTableSize int, filePathPrefix string) {
@@ -206,6 +217,8 @@ func (storage *Storage) findAtMemTable(key string, memTable *skiplist.SkipList) 
 }
 
 func (storage *Storage) findAtTable(key string) []byte {
+	logging.Error("findAtTable - ", storage.tables[1])
+
 	storage.tableMutex.Lock()
 	defer storage.tableMutex.Unlock()
 

@@ -114,13 +114,18 @@ func TestSet2(t *testing.T) {
 
 	storage.tables[1] = append(storage.tables[1], table1, table2, table3)
 
-	for i := 2; i <= 4; i++ {
-		keyAndValue := strconv.Itoa(i)
-		storage.Set(keyAndValue, []byte(keyAndValue))
+	for i := 1; i <= 7; i++ {
+		key := strconv.Itoa(i)
+		value := strconv.Itoa(i + 1)
+		storage.Set(key, []byte(value))
 	}
 
 	storage.flushMemtableSignal <- true
 	<-storage.switchTable
 
 	time.Sleep(1000 * time.Millisecond)
+
+	key := strconv.Itoa(1)
+	value := storage.Get(key)
+	logging.Error(string(value))
 }

@@ -1,136 +1,111 @@
 package storage
 
 import (
-	"io/ioutil"
-	"strconv"
-
 	"github.com/ISSuh/lsm-tree/logging"
 	"github.com/ISSuh/lsm-tree/skiplist"
 	"github.com/ISSuh/lsm-tree/table"
+	"github.com/ISSuh/lsm-tree/util"
 )
 
-func (storage *Storage) tableFileListOnLevel0() []string {
-	level := 0
-	levelDirPath := storage.option.Path + "/" + strconv.Itoa(level)
-	files, err := ioutil.ReadDir(levelDirPath)
-	if err != nil {
-		logging.Error("tableFileListOnLevel0 - can not read dir", levelDirPath, ", err : ", err)
+func (storage *Storage) compact(level int) {
+	if level < 0 {
+		return
+	}
+
+	nextLevel := level + 1
+
+	var newTables []*table.Table
+	if level == 0 {
+		newTables = storage.tableListOnLevel(level)
+	} else {
+		needMergeTableNum := storage.calculateCompactionTableNum(level)
+		if needMergeTableNum <= 0 {
+			return
+		}
+
+		newTables = storage.choiceWillMergedTable(level, needMergeTableNum)
+	}
+
+	// load newer table to memory
+	newMemTable := storage.loadTableToHeap(level, newTables)
+	if newMemTable == nil {
+		logging.Error("compactOnLevel0 - can not load new table. ")
+		return
+	}
+
+	firstKey := newMemTable.Front().Key()
+	lastKey := newMemTable.Back().Key()
+
+	// find target table about under compacttion range at next level
+	targetTables := storage.findCompactionTargetOnNextLevel(nextLevel, firstKey, lastKey)
+	baseMemTable := storage.loadTableToHeap(nextLevel, targetTables)
+	if baseMemTable == nil {
+		logging.Error("compactOnLevel0 - can not load old table. ")
+		return
+	}
+
+	// merge two table
+	storage.mergeTable(newMemTable, baseMemTable)
+
+	// flushing table to disk
+	storage.flushing(nextLevel, baseMemTable)
+
+	// erase already merged table
+	{
+		storage.tableMutex.Lock()
+		logging.Error("compact - will erase")
+
+		storage.eraseOldTable(level, newTables)
+		storage.eraseOldTable(nextLevel, targetTables)
+
+		logging.Error("findAtTable - ", storage.tables[1])
+
+		util.RemoveTableFile(newTables)
+		util.RemoveTableFile(targetTables)
+
+		storage.tableMutex.Unlock()
+	}
+}
+
+// merge two mem table.
+func (storage *Storage) mergeTable(newTable, baseTable *skiplist.SkipList) {
+	node := newTable.Front()
+	for node != nil {
+		baseTable.Set(node.Key(), node.Value())
+		node = node.Next()
+	}
+}
+
+// load table to memory
+func (storage *Storage) loadTableToHeap(level int, tables []*table.Table) *skiplist.SkipList {
+	if tables == nil {
 		return nil
 	}
 
-	var fileNames []string
-	for _, file := range files {
-		fileNames = append(fileNames, file.Name())
-	}
-	return fileNames
-}
-
-// func (storage *Storage) needCompaction(level int) (bool, []string) {
-// 	levelDirPath := storage.option.Path + "/" + strconv.Itoa(level)
-// 	files, err := ioutil.ReadDir(levelDirPath)
-// 	if err != nil {
-// 		logging.Error("checkNeedCompaction - can not read dir", levelDirPath, ", err : ", err)
-// 		return false, nil
-// 	}
-
-// if level == 0 {
-// 	limitedFileSizeOnLevel
-// } else {
-// 	limitedFileSizeOnLevel := (storage.option.LimitedFilesNumOnL0 * storage.option.TableSize) * (level * storage.option.TableSizeOffset)
-// }
-// if len(files) < limitedFileSizeOnLevel {
-// 	return false, nil
-// }
-
-// 	var fileNames []string
-// 	for _, file := range files {
-// 		fileNames = append(fileNames, file.Name())
-// 	}
-// 	return true, fileNames
-// }
-
-func (storage *Storage) compact(level int) {
-	if level == 0 {
-		fileNames := storage.tableFileListOnLevel0()
-		storage.compactOnLevel0(level, fileNames)
-	} else {
-		// storage.compactOnLevel(level, fileNames)
-	}
-
-	// for level := 0; level < storage.option.Level; level++ {
-	// 	need, fileNames := storage.needCompaction(level)
-	// 	if need {
-	// 		logging.Error("backgroundWork - will compact level ", level, " / ", fileNames)
-	// 		if level == 0 {
-	// 		} else {
-	// 		}
-	// util.RemoveMergedFile(storage.option.Path, level, fileNames)
-	// }
-	// }
-}
-
-func (storage *Storage) compactOnLevel0(level int, fileNames []string) {
-	logging.Error("compactOnLevel0 - ", fileNames)
-
-	tempMemTable := skiplist.New(storage.option.LevelOnSkipList)
-
-	filePathPrefix := storage.option.Path + "/" + strconv.Itoa(level) + "/"
-	for _, fileName := range fileNames {
-		filePath := filePathPrefix + fileName
-		table := table.OpenTable(0, filePath)
+	memTable := skiplist.New(storage.option.LevelOnSkipList)
+	for _, targetTable := range tables {
+		table := table.OpenTable(level, targetTable.FileName())
 		if table == nil {
-			return
+			return nil
 		}
 
 		for i := 0; i < table.BlockNum(); i++ {
 			block := table.LoadBlock(i)
 			iter := block.Iterator()
 			for iter != nil {
-				tempMemTable.Set(iter.Key(), iter.Value())
+				memTable.Set(iter.Key(), iter.Value())
 				iter = iter.Next()
 			}
 		}
 	}
-
-	firstKey := tempMemTable.Front().Key()
-	lastKey := tempMemTable.Back().Key()
-
-	targets := storage.findCompactionTargetOnNextLevel(level, firstKey, lastKey)
-	logging.Error("compactOnLevel0 - ", targets)
+	return memTable
 }
 
-// func (storage *Storage) compactOnLevel(level int, fileNames []string) {
-// 	tempMemTable := skiplist.New(storage.option.LevelOnSkipList)
-
-// 	filePathPrefix := storage.option.Path + "/" + strconv.Itoa(level) + "/"
-// 	for _, fileName := range fileNames {
-// 		filePath := filePathPrefix + fileName
-// 		table := table.OpenTable(0, filePath)
-// 		if table == nil {
-// 			return
-// 		}
-
-// 		for i := 0; i < table.BlockNum(); i++ {
-// 			block := table.LoadBlock(i)
-// 			iter := block.Iterator()
-// 			for iter != nil {
-// 				tempMemTable.Set(iter.Key(), iter.Value())
-// 				iter = iter.Next()
-// 			}
-// 		}
-// 	}
-
-// storage.buildTable(tempMemTable, level)
-// }
-
-func (storage *Storage) findCompactionTargetOnNextLevel(level int, begin, end string) []string {
-	var targetTableFileName []string
-	nextLevel := level + 1
+// find compaction target table on next level
+func (storage *Storage) findCompactionTargetOnNextLevel(nextLevel int, begin, end string) []*table.Table {
 	beginIndex, endIndex := 0, 0
 	for i, table := range storage.tables[nextLevel] {
 		firstKey := table.FirstKey()
-		logging.Error("findCompactionTargetOnNextLevel - ", begin, " ~ ", end, " <= ", firstKey)
-
 		if begin >= firstKey {
 			beginIndex = i
 			endIndex = i
@@ -141,42 +116,36 @@ func (storage *Storage) findCompactionTargetOnNextLevel(level int, begin, end st
 		}
 	}
 
+	var targetTable []*table.Table
 	tables := storage.tables[nextLevel][beginIndex : endIndex+1]
 	for _, table := range tables {
-		targetTableFileName = append(targetTableFileName, strconv.Itoa(table.Id()))
+		targetTable = append(targetTable, table)
 	}
-	return targetTableFileName
+	return targetTable
 }
 
-// func (storage *Storage) buildTable(tempMemTable *skiplist.SkipList, level int) {
-// nextLevel := level + 1
-// nextLevelTableSize := storage.option.TableSize * (nextLevel * storage.option.TableSizeOffset)
-// tableBuilder := table.NewTableBuilder(storage.option.BlockSize)
-// filePathPrefix := storage.option.Path + "/"
+func (storage *Storage) calculateCompactionTableNum(level int) int {
+	needMergeTableNum := 0
+	limitedFileSizeOnLevel := (storage.option.LimitedFilesNumOnL0 * storage.option.TableSize) * (level * storage.option.TableSizeOffset)
+	totalFileSize := util.TotalTableSizeOnLevel(storage.option.Path, level)
+	if int64(limitedFileSizeOnLevel) >= totalFileSize {
+		needMergeTableNum = int((int64(limitedFileSizeOnLevel) - totalFileSize) / int64(storage.option.TableSize))
+	}
+	return needMergeTableNum
+}
 
-// node := tempMemTable.Front()
-// for node != nil {
-// 	if len(node.Key()) <= 0 {
-// 		node = node.Next()
-// 		continue
-// 	}
+func (storage *Storage) choiceWillMergedTable(level, needMergeTableNum int) []*table.Table {
+	var tables []*table.Table
+	for i := 0; i < int(needMergeTableNum); i++ {
+		tables = append(tables, storage.tables[level][i])
+	}
+	return tables
+}
 
-// 	if tableBuilder.Size() >= nextLevelTableSize {
-// 		targetLevel := level
-// 		need, _ := storage.needCompaction(level)
-// 		if need {
-// 			targetLevel = nextLevel
-// 		}
-
-// 		filePathOnLevelPrefix := filePathPrefix + strconv.Itoa(targetLevel) + "/"
-// 		storage.writeToFile(targetLevel, tableBuilder, nextLevelTableSize, filePathOnLevelPrefix)
-// 	}
-
-// 	tableBuilder.Add([]byte(node.Key()), node.Value())
-// 	node = node.Next()
-// }
-
-// // wrtie remained data to file
-// filePathOnLevelPrefix := filePathPrefix + strconv.Itoa(nextLevel) + "/"
-// storage.writeToFile(nextLevel, tableBuilder, nextLevelTableSize, filePathOnLevelPrefix)
-// }
+func (storage *Storage) tableListOnLevel(level int) []*table.Table {
+	var tables []*table.Table
+	for _, table := range storage.tables[0] {
+		tables = append(tables, table)
+	}
+	return tables
+}

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/ISSuh/lsm-tree/logging"
+	"github.com/ISSuh/lsm-tree/table"
 )
 
 func CreateLevelDirectory(path string, MaxLevel int) bool {
@@ -20,13 +21,36 @@ func CreateLevelDirectory(path string, MaxLevel int) bool {
 	return true
 }
 
-func RemoveMergedFile(pathPrefix string, level int, fileNames []string) {
-	filePathPrefix := pathPrefix + "/" + strconv.Itoa(level) + "/"
-	for _, fileName := range fileNames {
-		file := filePathPrefix + fileName
-		_, err := os.Stat(file)
+func RemoveFile(filePaths []string) {
+	for _, filePath := range filePaths {
+		_, err := os.Stat(filePath)
 		if err == nil {
-			os.Remove(file)
+			os.Remove(filePath)
 		}
 	}
+}
+
+func RemoveTableFile(tables []*table.Table) {
+	for _, table := range tables {
+		_, err := os.Stat(table.FileName())
+		if err == nil {
+			os.Remove(table.FileName())
+		}
+	}
+}
+
+func TotalTableSizeOnLevel(path string, level int) int64 {
+	levelDir := path + "/" + strconv.Itoa(level)
+	var totalSize int64
+	err := filepath.Walk(levelDir, func(path string, info os.FileInfo, err error) error {
+		if !info.IsDir() {
+			totalSize += info.Size()
+		}
+		return nil
+	})
+
+	if err != nil {
+		return 0
+	}
+	return totalSize
 }

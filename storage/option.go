@@ -43,7 +43,7 @@ func NewOption() Option {
 		Path:                "./",
 		Level:               2,
 		BlockSize:           10 * B,
-		TableSize:           1 * KB, // 1KB
+		TableSize:           30 * B, // 1KB
 		LimitedFilesNumOnL0: 2,
 		TableSizeOffset:     10,
 		LevelOnSkipList:     5,

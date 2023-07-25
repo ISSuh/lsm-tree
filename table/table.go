@@ -63,6 +63,10 @@ func (table *Table) Id() int {
 	return table.id
 }
 
+func (table *Table) FileName() string {
+	return table.file.Name()
+}
+
 func (table *Table) FirstKey() string {
 	if len(table.blockMetas) <= 0 {
 		return ""

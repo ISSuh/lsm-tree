@@ -41,12 +41,12 @@ type Option struct {
 func NewOption() Option {
 	return Option{
 		Path:                "./",
-		Level:               2,
-		BlockSize:           10 * B,
-		TableSize:           30 * B, // 1KB
+		Level:               7,
+		BlockSize:           4 * B,
+		TableSize:           2 * MB, // 1KB
 		LimitedFilesNumOnL0: 2,
 		TableSizeOffset:     10,
 		LevelOnSkipList:     5,
-		MemTableSize:        100 * B,
+		MemTableSize:        4 * MB,
 	}
 }

@@ -53,6 +53,10 @@ func TestSet(t *testing.T) {
 
 	option := NewOption()
 	option.Path = DbPath
+	option.BlockSize = 15 * B
+	option.TableSize = 30 * B
+	option.MemTableSize = 100 * B
+	option.LimitedFilesNumOnL0 = 4
 
 	logging.Error(option)
 	storage := NewStorage(option)
@@ -77,15 +81,17 @@ func TestSet(t *testing.T) {
 	}
 
 	storage.Stop()
-	// ClearDbDir()
+	ClearDbDir()
 }
 
-func TestSet2(t *testing.T) {
+func TestBackgroundCompaction(t *testing.T) {
 	ClearDbDir()
 
 	option := NewOption()
 	option.Path = DbPath
-	option.BlockSize = 15
+	option.BlockSize = 15 * B
+	option.TableSize = 30 * B
+	option.MemTableSize = 100 * B
 	option.LimitedFilesNumOnL0 = 1
 
 	logging.Error(option)
@@ -112,6 +118,8 @@ func TestSet2(t *testing.T) {
 	table3 := tableBuilder.BuildTable(2, DbPath+"/1/2.db")
 	assert.NotEqual(t, table3, (*table.Table)(nil))
 
+	storage.tableId[1] = 3
+
 	storage.tables[1] = append(storage.tables[1], table1, table2, table3)
 
 	for i := 1; i <= 7; i++ {
@@ -127,5 +135,7 @@ func TestSet2(t *testing.T) {
 
 	key := strconv.Itoa(1)
 	value := storage.Get(key)
-	logging.Error(string(value))
+	assert.Equal(t, string(value), "2")
+
+	ClearDbDir()
 }

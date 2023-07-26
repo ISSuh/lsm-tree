@@ -175,7 +175,8 @@ func (storage *Storage) flushing(targetLevel int, memTable *skiplist.SkipList) {
 	node := memTable.Front()
 	for node != nil {
 		if tableBuilder.Size() >= storage.option.TableSize {
-			storage.writeToFile(targetLevel, tableBuilder, storage.option.TableSize, filePathPrefix)
+			storage.writeToFile(targetLevel, tableBuilder, filePathPrefix)
+			tableBuilder = table.NewTableBuilder(storage.option.BlockSize)
 		}
 
 		tableBuilder.Add([]byte(node.Key()), node.Value())
@@ -183,10 +184,10 @@ func (storage *Storage) flushing(targetLevel int, memTable *skiplist.SkipList) {
 	}
 
 	// wrtie remained data to filez
-	storage.writeToFile(targetLevel, tableBuilder, storage.option.TableSize, filePathPrefix)
+	storage.writeToFile(targetLevel, tableBuilder, filePathPrefix)
 }
 
-func (storage *Storage) writeToFile(level int, tableBuilder *table.TableBuilder, nextLevelTableSize int, filePathPrefix string) {
+func (storage *Storage) writeToFile(level int, tableBuilder *table.TableBuilder, filePathPrefix string) {
 	storage.tableMutex.Lock()
 	defer storage.tableMutex.Unlock()
 
@@ -194,8 +195,6 @@ func (storage *Storage) writeToFile(level int, tableBuilder *table.TableBuilder,
 	newTable := tableBuilder.BuildTable(storage.tableId[level], file)
 	storage.tables[level] = append(storage.tables[level], newTable)
 
-	// change to new TableBuilder
-	tableBuilder = table.NewTableBuilder(storage.option.BlockSize)
 	storage.tableId[level]++
 }
 
@@ -210,15 +209,13 @@ func (storage *Storage) findAtMemTable(key string, memTable *skiplist.SkipList) 
 	if memTable != nil {
 		data := memTable.Get(key)
 		if data != nil {
-			return data
+			return data.Value()
 		}
 	}
 	return nil
 }
 
 func (storage *Storage) findAtTable(key string) []byte {
-	logging.Error("findAtTable - ", storage.tables[1])
-
 	storage.tableMutex.Lock()
 	defer storage.tableMutex.Unlock()
 

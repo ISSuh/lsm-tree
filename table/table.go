@@ -49,10 +49,6 @@ func OpenTable(id int, path string) *Table {
 	return table
 }
 
-func (table *Table) Iterator() *Iterator {
-	return newTableIterator(table)
-}
-
 func (table *Table) NewTableLeader() *TableLeader {
 	return &TableLeader{
 		table: table,
@@ -72,10 +68,6 @@ func (table *Table) FirstKey() string {
 		return ""
 	}
 	return string(table.blockMetas[0].FirstKey())
-}
-
-func (table *Table) Metas() []block.BlockMeta {
-	return table.blockMetas
 }
 
 func (table *Table) BlockNum() int {

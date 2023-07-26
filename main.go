@@ -1,30 +1,72 @@
 package main
 
 import (
-	"fmt"
+	"io"
+	"log"
+	"net/http"
 
-	table "github.com/ISSuh/lsm-tree/table"
+	"github.com/ISSuh/lsm-tree/logging"
+	"github.com/ISSuh/lsm-tree/storage"
+	"github.com/gorilla/mux"
 )
 
-const (
-	DefaultMaxBlockSize = 4096
-	DefaultMaxTableSize = DefaultMaxBlockSize * 10
-)
+type StorageHandler struct {
+	storage *storage.Storage
+}
 
-type Entry struct {
-	offset int16
+func newHandler(option storage.Option) *StorageHandler {
+	return &StorageHandler{
+		storage: storage.NewStorage(option),
+	}
+}
+
+func (handler StorageHandler) Get(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	key := params["key"]
+
+	value := handler.storage.Get(key)
+	w.WriteHeader(http.StatusOK)
+	w.Write(value)
+}
+
+func (handler StorageHandler) Set(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	key := params["key"]
+
+	value, err := io.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	handler.storage.Set(key, value)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte{})
+}
+
+func (handler StorageHandler) Remove(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	key := params["key"]
+
+	handler.storage.Remove(key)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte{})
 }
 
 func main() {
-	fmt.Println("TEST")
+	logging.Info("storage server")
+	storageOption := storage.NewOption()
+	storageOption.Path = "./temp"
+	storageHandler := newHandler(storageOption)
 
-	builder := table.NewTableBuilder(24)
-	builder.Add([]byte("aaa"), []byte("aaa"))
-	builder.Add([]byte("bbb"), []byte("bbb"))
-	builder.Add([]byte("ccc"), []byte("ccc"))
-	builder.Add([]byte("ddd"), []byte("ddd"))
-	builder.Add([]byte("eee"), []byte("eee"))
-	builder.Add([]byte("fff"), []byte("fff"))
+	router := mux.NewRouter()
+	router.HandleFunc("/api/{key}", storageHandler.Get).Methods("GET")
+	router.HandleFunc("/api/{key}", storageHandler.Set).Methods("POST")
+	router.HandleFunc("/api/{key}", storageHandler.Remove).Methods("DELETE")
 
-	builder.BuildTable(0, "./test")
+	http.Handle("/", router)
+	err := http.ListenAndServe(":33660", nil)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
 }

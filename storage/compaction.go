@@ -33,19 +33,25 @@ func (storage *Storage) compact(level int) {
 		return
 	}
 
-	firstKey := newMemTable.Front().Key()
-	lastKey := newMemTable.Back().Key()
+	var targetTables []*table.Table
+	var baseMemTable *skiplist.SkipList
+	if len(storage.tables[nextLevel]) > 0 {
+		firstKey := newMemTable.Front().Key()
+		lastKey := newMemTable.Back().Key()
 
-	// find target table about under compacttion range at next level
-	targetTables := storage.findCompactionTargetOnNextLevel(nextLevel, firstKey, lastKey)
-	baseMemTable := storage.loadTableToHeap(nextLevel, targetTables)
-	if baseMemTable == nil {
-		logging.Error("compactOnLevel0 - can not load old table. ")
-		return
+		// find target table about under compacttion range at next level
+		targetTables = storage.findCompactionTargetOnNextLevel(nextLevel, firstKey, lastKey)
+		baseMemTable = storage.loadTableToHeap(nextLevel, targetTables)
+		if baseMemTable == nil {
+			logging.Error("compactOnLevel0 - can not load old table. ")
+			return
+		}
+
+		// merge two table
+		storage.mergeTable(newMemTable, baseMemTable)
+	} else {
+		baseMemTable = newMemTable
 	}
-
-	// merge two table
-	storage.mergeTable(newMemTable, baseMemTable)
 
 	// flushing table to disk
 	storage.flushing(nextLevel, baseMemTable)
@@ -53,15 +59,16 @@ func (storage *Storage) compact(level int) {
 	// erase already merged table
 	{
 		storage.tableMutex.Lock()
-		logging.Error("compact - will erase")
 
 		storage.eraseOldTable(level, newTables)
-		storage.eraseOldTable(nextLevel, targetTables)
-
-		logging.Error("findAtTable - ", storage.tables[1])
+		if len(targetTables) > 0 {
+			storage.eraseOldTable(nextLevel, targetTables)
+		}
 
 		util.RemoveTableFile(newTables)
-		util.RemoveTableFile(targetTables)
+		if len(targetTables) > 0 {
+			util.RemoveTableFile(targetTables)
+		}
 
 		storage.tableMutex.Unlock()
 	}
@@ -115,6 +122,8 @@ func (storage *Storage) findCompactionTargetOnNextLevel(nextLevel int, begin, en
 			endIndex = i
 		}
 	}
+
+	logging.Error("findCompactionTargetOnNextLevel - [", begin, " / ", end, "], [", beginIndex, " / ", endIndex, "]")
 
 	var targetTable []*table.Table
 	tables := storage.tables[nextLevel][beginIndex : endIndex+1]

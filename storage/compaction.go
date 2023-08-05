@@ -2,9 +2,9 @@ package storage
 
 import (
 	"github.com/ISSuh/lsm-tree/logging"
-	"github.com/ISSuh/lsm-tree/skiplist"
 	"github.com/ISSuh/lsm-tree/table"
 	"github.com/ISSuh/lsm-tree/util"
+	"github.com/ISSuh/skiplist"
 )
 
 func (storage *Storage) compact(level int) {

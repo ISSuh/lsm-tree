@@ -83,11 +83,6 @@ func TestBlockDecode(t *testing.T) {
 	assert.Equal(t, block.Offset(), []int16{0})
 }
 
-func TestNewBlockMeta(t *testing.T) {
-	iter := newBlockIterator(nil)
-	assert.Equal(t, iter, (*Iterator)(nil))
-}
-
 func TestInvalidIterator(t *testing.T) {
 	iter := newBlockIterator(nil)
 	assert.Equal(t, iter, (*Iterator)(nil))

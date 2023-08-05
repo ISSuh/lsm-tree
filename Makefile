@@ -1,5 +1,5 @@
 test:
-	go test -v ...
+	go test -v ./...
 
 coverage:
 	go test ./... -coverprofile=coverage.out

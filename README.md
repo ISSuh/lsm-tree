@@ -1,7 +1,6 @@
 # lsm-storage
 implement persistence storage based [lsm-tree](https://en.wikipedia.org/wiki/Log-structured_merge-tree)
 
-
 # Example
 
 ```bash
@@ -32,3 +31,8 @@ storage.Remove(key)
 
 # Data Layout 
 ![data_layout](./doc/data_layout.png)
+
+#ToDo
+* unittest
+* remove flag on entry
+* implement WAL(write ahead logging)

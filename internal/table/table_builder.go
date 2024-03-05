@@ -28,8 +28,8 @@ import (
 	"encoding/binary"
 	"os"
 
-	"github.com/ISSuh/lsm-tree/block"
-	"github.com/ISSuh/lsm-tree/logging"
+	"github.com/ISSuh/lsm-tree/internal/block"
+	"github.com/ISSuh/lsm-tree/internal/logging"
 )
 
 type TableBuilder struct {

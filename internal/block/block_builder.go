@@ -32,7 +32,7 @@ type BlockBuilder struct {
 	data         []byte
 	offsets      []int16
 	maxBlockSize int
-	entryNum     int
+	entryNum     uint16
 }
 
 func NewBlockBuilder(maxBlockSize int) *BlockBuilder {

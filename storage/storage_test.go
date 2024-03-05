@@ -31,8 +31,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ISSuh/lsm-tree/logging"
-	"github.com/ISSuh/lsm-tree/table"
+	"github.com/ISSuh/lsm-tree/internal/logging"
+	"github.com/ISSuh/lsm-tree/internal/table"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -25,7 +25,7 @@ SOFTWARE.
 package block
 
 import (
-	"github.com/ISSuh/lsm-tree/entry"
+	"github.com/ISSuh/lsm-tree/internal/entry"
 )
 
 type Iterator struct {
@@ -49,7 +49,7 @@ func (iter *Iterator) Next() *Iterator {
 	}
 
 	iter.index++
-	if iter.index >= iter.blcok.entryNum {
+	if iter.index >= int(iter.blcok.entryNum) {
 		return nil
 	}
 
@@ -57,7 +57,7 @@ func (iter *Iterator) Next() *Iterator {
 	var end int16 = 0
 
 	nextIndex := iter.index + 1
-	if nextIndex >= iter.blcok.entryNum {
+	if nextIndex >= int(iter.blcok.entryNum) {
 		end = int16(len(iter.blcok.data))
 	} else {
 		end = iter.blcok.offsets[nextIndex]

@@ -35,7 +35,7 @@ const (
 type Block struct {
 	data     []byte
 	offsets  []int16
-	entryNum int
+	entryNum uint16
 }
 
 func (block *Block) Iterator() *Iterator {
@@ -50,7 +50,7 @@ func (block *Block) Offset() []int16 {
 	return block.offsets
 }
 
-func (block *Block) EntryNum() int {
+func (block *Block) EntryNum() uint16 {
 	return block.entryNum
 }
 
@@ -71,7 +71,7 @@ func (block *Block) Encode() []byte {
 
 func (block *Block) Decode(data []byte) {
 	entryNumValueOffset := len(data) - LengthTypeSize
-	block.entryNum = int(binary.LittleEndian.Uint16(data[entryNumValueOffset:]))
+	block.entryNum = binary.LittleEndian.Uint16(data[entryNumValueOffset:])
 
 	offset := 0
 	calculrateOffset := entryNumValueOffset - (int(block.entryNum) * LengthTypeSize)

@@ -1,5 +1,6 @@
-# lsm-storage
-implement persistence storage based [lsm-tree](https://en.wikipedia.org/wiki/Log-structured_merge-tree)
+# lsm-engine
+
+implement [lsm-tree](https://en.wikipedia.org/wiki/Log-structured_merge-tree) based storage engine
 
 # Example
 
@@ -29,10 +30,12 @@ if getValue == nil {
 storage.Remove(key)
 ```
 
-# Data Layout 
+# Data Layout
+
 ![data_layout](./doc/data_layout.png)
 
 #ToDo
-* unittest
-* remove flag on entry
-* implement WAL(write ahead logging)
+
+- unittest
+- remove flag on entry
+- implement WAL(write ahead logging)

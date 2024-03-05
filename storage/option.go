@@ -30,6 +30,17 @@ const (
 	MB int = 1024 * 1024
 )
 
+const (
+	CurrentPath               = "./"
+	DefaultLevel              = 7
+	DefaultBlockSize          = 4
+	DefaultTableSize          = 2
+	DefaultLimitedFileNumOnL0 = 2
+	DefaultTableSizeOffset    = 10
+	DefaultLevelOnSkiplist    = 5
+	DefaultMembtableSize      = 4
+)
+
 type Option struct {
 	// default directory path where placed files
 	Path string
@@ -64,13 +75,13 @@ type Option struct {
 
 func NewOption() Option {
 	return Option{
-		Path:                "./",
-		Level:               7,
-		BlockSize:           4 * B,
-		TableSize:           2 * MB, // 1KB
-		LimitedFilesNumOnL0: 2,
-		TableSizeOffset:     10,
-		LevelOnSkipList:     5,
-		MemTableSize:        4 * MB,
+		Path:                CurrentPath,
+		Level:               DefaultLevel,
+		BlockSize:           DefaultBlockSize * B,
+		TableSize:           DefaultTableSize * MB,
+		LimitedFilesNumOnL0: DefaultLimitedFileNumOnL0,
+		TableSizeOffset:     DefaultTableSizeOffset,
+		LevelOnSkipList:     DefaultLevelOnSkiplist,
+		MemTableSize:        DefaultMembtableSize * MB,
 	}
 }
